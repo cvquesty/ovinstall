@@ -1,0 +1,559 @@
+#!/bin/bash
+#
+# =============================================================================
+# OpenVox Installer - Main Entry Point
+# =============================================================================
+# Automated installer for the OpenVox stack (Puppet + components)
+#
+# Usage:
+#   Interactive mode (prompts for all required values):
+#     sudo ./openvox-installer
+#
+#   Non-interactive mode (uses CLI flags or config file):
+#     sudo ./openvox-installer --mode complete
+#     sudo ./openvox-installer --config /path/to/config.ini
+#     sudo ./openvox-installer --agent --server-hostname openvox.example.com
+#
+# Flags:
+#   --config FILE       Path to config file (default: /etc/openvox/openvox.conf)
+#   --mode MODE         Installation mode: agent, server, complete
+#   --agent            Install only agent (implies --non-interactive)
+#   --server           Install server (agent + PuppetDB + r10k)
+#   --gui              Install OpenVox-GUI
+#   --non-interactive  Run without prompting (for scripted installs)
+#   --dry-run          Show what would be done
+#   --force            Force installation even if already installed
+#   --skip-preflight   Skip preflight checks
+#   --verbose          Verbose output
+#   --help             Show this help
+#
+# =============================================================================
+
+# Exit on error, undefined variables, and pipe failures
+# This ensures any command failure stops execution immediately
+set -euo pipefail
+
+# =============================================================================
+# SECTION: Script Initialization
+# =============================================================================
+# Determine script directory and set up paths.
+# The script expects to run from bin/ directory of the project.
+
+# Resolve the absolute path of this script, following symlinks
+# This ensures we can run from any directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Define project subdirectories relative to script directory
+# - etc/    : Configuration file templates
+# - lib/    : Component installer scripts
+CONFIG_DIR="${SCRIPT_DIR}/etc"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
+# Default configuration file location
+# This can be overridden with --config flag
+CONFIG_FILE="/etc/openvox/openvox.conf"
+
+# =============================================================================
+# SECTION: Source Library Functions
+# =============================================================================
+# Load all component installer libraries.
+# Order matters: functions.sh must be loaded first as it provides common
+# utilities (logging, OS detection, etc.) that other scripts depend on.
+
+# Primary source of shared functions (logging, OS detection, repo setup, etc.)
+source "${LIB_DIR}/functions.sh"
+
+# Load component installers in order (functions.sh already loaded above)
+for lib in "${LIB_DIR}"/*.sh; do
+    # Skip functions.sh as it's already sourced above
+    if [[ -f "$lib" && "$lib" != "${LIB_DIR}/functions.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$lib"
+    fi
+done
+
+# =============================================================================
+# SECTION: Global Variables and Defaults
+# =============================================================================
+# Initialize all global variables with default values.
+# These can be overridden by CLI arguments, config file, or interactive prompts.
+
+# Installation mode flags (boolean strings: "true" or "false")
+INSTALL_AGENT=false        # OpenVox Agent (puppet-agent package)
+INSTALL_SERVER=false       # Puppet Server (includes agent + PuppetDB)
+INSTALL_GUI=false          # OpenVox-GUI (Python web interface)
+INSTALL_R10K=false         # r10k (only with server) - control repo deployer
+
+# Installation behavior flags
+DRY_RUN=false              # If true, only show what would be installed
+FORCE=false                # If true, reinstall even if already installed
+SKIP_PREFLIGHT=false       # If true, skip system preflight checks
+NONINTERACTIVE=false      # If true, don't prompt for user input
+
+# Logging configuration
+LOG_LEVEL="info"           # Log level: debug, info, notice, warning, error
+
+# Installation mode string (used with --mode flag)
+# Modes: agent, server, complete
+INSTALL_MODE="complete"   # Default to complete installation
+
+# Configuration values (filled from config file or interactive prompts)
+server_hostname=""         # FQDN of the Puppet server (REQUIRED for server)
+r10k_remote=""            # Git URL to control repo (REQUIRED for r10k)
+gui_port="4567"           # Port for OpenVox-GUI web interface
+
+# Tracking flag to determine if user explicitly selected components
+# If true, skip mode-based defaults in set_install_mode()
+EXPLICIT_COMPONENTS=false
+
+# =============================================================================
+# SECTION: Usage Information
+# =============================================================================
+# Display help message with all available options and examples.
+
+usage() {
+    cat << EOF
+OpenVox Installer - Automated OpenVox Stack Installation
+
+Usage: $0 [OPTIONS]
+
+OPTIONS:
+    -c, --config FILE       Configuration file (default: /etc/openvox/openvox.conf)
+    -m, --mode MODE         Installation mode: agent|server|complete
+                            - agent:    OpenVox Agent only
+                            - server:   Agent + Puppet Server + PuppetDB + r10k
+                            - complete: All components including GUI
+    --agent                Install only the OpenVox Agent (non-interactive)
+    --server               Install OpenVox Server (includes r10k)
+    --gui                  Install OpenVox-GUI
+    --non-interactive      Run without prompting (for scripted installs)
+    -d, --dry-run          Show what would be done without executing
+    -f, --force            Force installation even if already installed
+    -s, --skip-preflight   Skip preflight checks
+    -v, --verbose          Verbose output
+    -h, --help             Show this help message
+
+EXAMPLES:
+    # Interactive installation (prompts for required values):
+    $0
+
+    # Non-interactive with all defaults:
+    $0 --mode complete --non-interactive
+
+    # Agent only:
+    $0 --agent
+
+    # Server with r10k (requires r10k_remote in config or prompt):
+    $0 --server
+
+    # With custom configuration file:
+    $0 --config /path/to/openvox.conf
+
+    # Preview installation:
+    $0 --dry-run
+
+CONFIGURATION:
+    Configuration can be provided via:
+    1. Interactive prompts (default behavior)
+    2. Command-line flags (--agent, --server, etc.)
+    3. Configuration file (--config /path/to/file.ini)
+
+    See etc/openvox.conf.example for configuration file format.
+
+EOF
+    exit 0
+}
+
+# =============================================================================
+# SECTION: Command-Line Argument Parsing
+# =============================================================================
+# Parse command-line arguments and set appropriate flags.
+# This function handles both short (-x) and long (--xxxx) options.
+
+parse_args() {
+    # Initialize component flags to false (will be set based on mode or flags)
+    INSTALL_AGENT=false
+    INSTALL_SERVER=false
+    INSTALL_R10K=false
+    INSTALL_GUI=false
+    EXPLICIT_COMPONENTS=false
+    
+    # Process all command-line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            # Configuration file path
+            -c|--config)
+                CONFIG_FILE="$2"
+                shift 2
+                ;;
+            
+            # Installation mode (agent, server, complete)
+            -m|--mode)
+                INSTALL_MODE="$2"
+                shift 2
+                ;;
+            
+            # Agent-only installation (implies --non-interactive)
+            --agent)
+                INSTALL_AGENT=true
+                INSTALL_SERVER=false
+                INSTALL_R10K=false
+                INSTALL_GUI=false
+                EXPLICIT_COMPONENTS=true
+                NONINTERACTIVE=true
+                shift
+                ;;
+            
+            # Server installation (agent + PuppetDB + r10k)
+            --server)
+                INSTALL_AGENT=true
+                INSTALL_SERVER=true
+                INSTALL_R10K=true
+                EXPLICIT_COMPONENTS=true
+                shift
+                ;;
+            
+            # GUI installation
+            --gui)
+                INSTALL_GUI=true
+                EXPLICIT_COMPONENTS=true
+                shift
+                ;;
+            
+            # Non-interactive mode (no prompts)
+            --non-interactive)
+                NONINTERACTIVE=true
+                shift
+                ;;
+            
+            # Dry-run mode
+            -d|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            
+            # Force reinstall
+            -f|--force)
+                FORCE=true
+                shift
+                ;;
+            
+            # Skip preflight checks
+            -s|--skip-preflight)
+                SKIP_PREFLIGHT=true
+                shift
+                ;;
+            
+            # Verbose output
+            -v|--verbose)
+                VERBOSE=true
+                LOG_LEVEL="debug"
+                set -x  # Enable bash debug mode
+                shift
+                ;;
+            
+            # Show help
+            -h|--help)
+                usage
+                ;;
+            
+            # Unknown option - show error and usage
+            *)
+                echo "Unknown option: $1"
+                usage
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# SECTION: Interactive Prompts
+# =============================================================================
+# Prompt user for required configuration values.
+# Only runs if NONINTERACTIVE=false.
+
+prompt_for_config() {
+    # If already in non-interactive mode, use defaults or config file values
+    if [[ "$NONINTERACTIVE" == "true" ]]; then
+        return 0
+    fi
+    
+    echo ""
+    echo "=========================================="
+    echo "OpenVox Configuration"
+    echo "=========================================="
+    echo ""
+    
+    # Prompt for server hostname (required for server mode)
+    if [[ "$INSTALL_SERVER" == "true" || "$INSTALL_MODE" != "agent" ]]; then
+        if [[ -z "$server_hostname" ]]; then
+            read -p "Enter server hostname (FQDN): " -r server_hostname
+            # Validate hostname is not empty
+            if [[ -z "$server_hostname" ]]; then
+                log_error "Server hostname is required"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # Prompt for r10k control repo URL (required if r10k will be installed)
+    if [[ "$INSTALL_R10K" == "true" ]]; then
+        if [[ -z "$r10k_remote" ]]; then
+            echo ""
+            echo "r10k requires a Git control repository URL."
+            echo "This is the Git remote URL for your Puppet code repo."
+            echo "Example: git@github.com:yourorg/control-repo.git"
+            echo "or:     https://github.com/yourorg/control-repo.git"
+            echo ""
+            read -p "Enter control repo Git URL: " -r r10k_remote
+            if [[ -z "$r10k_remote" ]]; then
+                log_error "Control repo URL is required for r10k"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # Prompt for GUI port (if GUI will be installed)
+    if [[ "$INSTALL_GUI" == "true" ]]; then
+        read -p "Enter GUI port [default: $gui_port]: " -r input_port
+        if [[ -n "$input_port" ]]; then
+            gui_port="$input_port"
+        fi
+    fi
+    
+    echo ""
+    echo "Configuration complete."
+    echo ""
+}
+
+# =============================================================================
+# SECTION: Install Mode Configuration
+# =============================================================================
+# Set component flags based on installation mode or explicit flags.
+# Only runs if user didn't explicitly specify components via CLI flags.
+
+set_install_mode() {
+    # If explicit component flags were given, skip mode-based defaults
+    # This preserves the user's explicit choices
+    if [[ "$EXPLICIT_COMPONENTS" == "true" ]]; then
+        log_info "Using explicit component selection"
+        return 0
+    fi
+    
+    # Set components based on installation mode
+    case "$INSTALL_MODE" in
+        agent)
+            # Agent-only mode: just the Puppet agent
+            INSTALL_AGENT=true
+            INSTALL_SERVER=false
+            INSTALL_R10K=false
+            INSTALL_GUI=false
+            ;;
+        server)
+            # Server mode: agent + Puppet Server + PuppetDB + r10k
+            INSTALL_AGENT=true
+            INSTALL_SERVER=true
+            INSTALL_R10K=true
+            INSTALL_GUI=false
+            ;;
+        complete)
+            # Complete mode: all components
+            INSTALL_AGENT=true
+            INSTALL_SERVER=true
+            INSTALL_R10K=true
+            INSTALL_GUI=true
+            ;;
+        *)
+            log_error "Unknown install mode: $INSTALL_MODE"
+            log_error "Valid modes: agent, server, complete"
+            exit 1
+            ;;
+    esac
+    
+    log_info "Installation mode: $INSTALL_MODE"
+}
+
+# =============================================================================
+# SECTION: Banner Display
+# =============================================================================
+# Display ASCII art banner for OpenVox installer.
+
+print_banner() {
+    cat << EOF
+
+    ██████╗ ██████╗  ██████╗  █████╗ ██████╗ ██████╗  █████╗ ████████╗███████╗██╗
+    ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██╔════╝██║
+    ██████╔╝██████╔╝██║   ██║███████║██████╔╝██████╔╝███████║   ██║   ███████║██║
+    ██╔═══╝ ██╔══██╗██║   ██║██╔══██║██╔══██╗██╔══██╗██╔══██║   ██║   ╚════██║╚═╝
+    ██║     ██║  ██║╚██████╔╝██║  ██║██║  ██║██║  ██║██║  ██║   ██║   ███████║██╗
+    ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝
+
+    ██████╗ ███████╗███████╗██╗      ██████╗ ██████╗ ███████╗██████╗ 
+    ██╔══██╗██╔════╝██╔════╝██║     ██╔════╝ ██╔══██╗██╔════╝██╔══██╗
+    ██████╔╝█████╗  █████╗  ██║     ██║  ███╗██████╔╝█████╗  ██████╔╝
+    ██╔══██╗██╔══╝  ██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  ██╔══██╗
+    ██║  ██║███████╗███████╗███████╗╚██████╔╝██║  ██║███████╗██║  ██║
+    ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+
+    OpenVox Automated Installer v0.2.0
+    ====================================
+
+EOF
+}
+
+# =============================================================================
+# SECTION: Dry Run Output
+# =============================================================================
+# Display what would be installed in dry-run mode.
+
+dry_run() {
+    log_info "Components to be installed:"
+    
+    # Show each component that will be installed
+    [[ "$INSTALL_AGENT" == "true" ]] && log_info "  - OpenVox Agent"
+    [[ "$INSTALL_SERVER" == "true" ]] && log_info "  - OpenVox Server (Puppet Server)"
+    [[ "$INSTALL_R10K" == "true" ]] && log_info "  - r10k (Puppet code deployment)"
+    [[ "$INSTALL_GUI" == "true" ]] && log_info "  - OpenVox-GUI"
+    
+    # Show configuration that will be used
+    if [[ -n "$server_hostname" ]]; then
+        log_info "  Server hostname: $server_hostname"
+    fi
+    if [[ -n "$r10k_remote" ]]; then
+        log_info "  Control repo: $r10k_remote"
+    fi
+    
+    return 0
+}
+
+# =============================================================================
+# SECTION: Installation Summary
+# =============================================================================
+# Display post-installation summary and next steps.
+
+print_summary() {
+    cat << EOF
+
+    ========================================
+    Installation Summary
+    ========================================
+
+    OpenVox installation completed successfully!
+
+    Next steps:
+    1. Review /var/log/openvox/install.log for details
+    2. Configure your Puppetfile for r10k
+    3. Run initial Puppet agent run:
+       puppet agent -t
+
+EOF
+
+    # Add server-specific instructions
+    if [[ "$INSTALL_SERVER" == "true" ]]; then
+        cat << EOF
+
+    Puppet Server:
+    - Server is running on port 8140
+    - Sign certificates: puppetserver ca sign --all
+
+EOF
+    fi
+
+    # Add GUI-specific instructions
+    if [[ "$INSTALL_GUI" == "true" ]]; then
+        cat << EOF
+
+    OpenVox-GUI:
+    - URL: https://${server_hostname:-localhost}:${gui_port}
+    - Credentials: Check /opt/openvox-gui/config/.credentials
+
+EOF
+    fi
+}
+
+# =============================================================================
+# SECTION: Main Execution
+# =============================================================================
+# Main entry point for the installer.
+# Orchestrates all phases of the installation process.
+
+main() {
+    # Step 1: Parse command-line arguments
+    # This sets initial flags based on CLI input
+    parse_args "$@"
+    
+    # Step 2: Display banner
+    print_banner
+    
+    # Step 3: Check for root privileges
+    # Most installation steps require root access
+    if [[ $EUID -ne 0 ]]; then
+        log_fatal "This script must be run as root (use sudo)"
+    fi
+    
+    # Step 4: Display startup information
+    log_info "Starting OpenVox installation..."
+    log_info "Config file: $CONFIG_FILE"
+    
+    # Step 5: Run preflight checks
+    # Validates OS support, disk space, network connectivity
+    if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
+        run_preflight
+    else
+        log_warn "Skipping preflight checks (--skip-preflight)"
+    fi
+    
+    # Step 6: Load configuration from file if it exists
+    load_config "$CONFIG_FILE"
+    
+    # Step 7: Set install mode based on flags
+    # This determines which components to install
+    set_install_mode
+    
+    # Step 8: Interactive prompts (if not non-interactive)
+    # Prompts for required values like server_hostname, r10k_remote
+    prompt_for_config
+    
+    # Step 9: Setup logging to file
+    setup_logging
+    
+    # Step 10: Handle dry-run mode
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_warn "DRY RUN MODE - No changes will be made"
+        dry_run
+        print_summary
+        exit 0
+    fi
+    
+    # Step 11: Execute installation phases
+    
+    # Phase 1: Setup repository
+    # Configures package repositories (yum.voxpupuli.org or apt.voxpupuli.org)
+    phase_setup_repo
+    
+    # Phase 2: Install components
+    # Installs selected components based on flags
+    phase_install_components
+    
+    # Phase 3: Post-install configuration
+    # Configures installed components
+    phase_post_install
+    
+    # Phase 4: Verify installation
+    # Checks that installed components are running
+    phase_verify
+    
+    # Step 12: Display completion message
+    log_info "Installation complete!"
+    print_summary
+    
+    exit 0
+}
+
+# =============================================================================
+# SECTION: Script Entry Point
+# =============================================================================
+# Execute main function with all passed arguments.
+# The "|| exit $?" ensures proper exit code propagation.
+
+main "$@" && exit 0 || exit 1

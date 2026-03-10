@@ -1,0 +1,97 @@
+# OpenVox Installer Configuration
+# Copy this file to /etc/openvox/openvox.conf and modify as needed
+#
+# You can also run the installer with --non-interactive flag to skip prompts
+# if all required values are provided in this config file.
+
+# =============================================================================
+# General Settings
+# =============================================================================
+
+# Installation mode: agent, server, complete
+# - agent:    OpenVox Agent only (connects to existing server)
+# - server:   Agent + Puppet Server + PuppetDB + r10k
+# - complete: All components including GUI
+# Default: complete
+# install_mode = complete
+
+# Run in non-interactive mode (skip prompts)
+# Set to true to run without user interaction
+# Default: false
+# non_interactive = false
+
+# =============================================================================
+# Network Settings
+# =============================================================================
+
+# Server hostname (FQDN) - REQUIRED for server installations
+# This is the fully-qualified domain name of the Puppet server
+# Example: openvox.example.com
+# server_hostname = openvox.example.com
+
+# =============================================================================
+# r10k Settings (Server Only)
+# =============================================================================
+
+# Git remote URL for control repository - REQUIRED if installing r10k
+# This is the URL to your Puppet control repository (control repo)
+# The control repo contains your Puppet code organized by Git branch
+#
+# Example URLs:
+#   SSH:  git@github.com:yourorg/control-repo.git
+#   HTTPS: https://github.com/yourorg/control-repo.git
+#
+# r10k will clone this repository and create environments from branches
+# r10k_remote = git@github.com:yourorg/control-repo.git
+
+# =============================================================================
+# OpenVox-GUI Settings
+# =============================================================================
+
+# Port for OpenVox-GUI web interface
+# Default: 4567
+# gui_port = 4567
+
+# =============================================================================
+# Security Settings
+# =============================================================================
+
+# Configure firewall (RHEL: firewalld, Debian: ufw)
+# Default: false (disabled)
+# firewall = false
+
+# SELinux mode (RHEL only): enforcing, permissive, disabled
+# Default: permissive
+# selinux = permissive
+
+# =============================================================================
+# Agent Settings
+# =============================================================================
+
+# Agent certificate name (use 'auto' for hostname-based)
+# Default: auto
+# certname = auto
+
+# Puppet server to connect to (for agent-only installs)
+# Default: (none - uses server_hostname if set)
+# agent_server = puppet.example.com
+
+# Agent run interval (examples: 30m, 1h, 2h)
+# Default: 30m
+# runinterval = 30m
+
+# =============================================================================
+# Server Settings (Server Installations Only)
+# =============================================================================
+
+# JVM memory for PuppetServer
+# Default: 2g
+# jvm_memory = 2g
+
+# =============================================================================
+# Logging Settings
+# =============================================================================
+
+# Log level: debug, info, notice, warning, err
+# Default: info
+# log_level = info
