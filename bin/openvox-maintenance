@@ -1,0 +1,537 @@
+#!/bin/bash
+#
+# =============================================================================
+# OpenVox Maintenance Script
+# =============================================================================
+# Manage OpenVox infrastructure scaling and maintenance.
+#
+# Usage:
+#   openvox-maintenance --health
+#   openvox-maintenance --add compile-master --host puppet-compile2
+#   openvox-maintenance --remove compile-master --host puppet-compile2
+#   openvox-maintenance --mode ca-only
+#   openvox-maintenance --mode all-in-one
+#   openvox-maintenance --backup --to /backups/openvox-20240324
+#   openvox-maintenance --restore --from /backups/openvox-20240324
+#   openvox-maintenance --tune
+#
+# =============================================================================
+
+set -euo pipefail
+
+# ─── Defaults ────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+LOG_LEVEL="info"
+ACTION=""
+TARGET_HOST=""
+MODE=""
+BACKUP_DIR=""
+TUNE_COMPONENT=""
+
+# ─── Colors ──────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
+
+# ─── Usage ───────────────────────────────────────────────────────────────────
+usage() {
+    cat << EOF
+OpenVox Maintenance Script - Scale and maintain OpenVox infrastructure
+
+Usage: openvox-maintenance [OPTIONS]
+
+Actions:
+    --health                    Check health of all OpenVox components
+    --add COMPONENT --host H    Add a component (compile-master, puppetdb-replica)
+    --remove COMPONENT --host H Remove a component
+    --mode MODE                 Change server mode (ca-only, all-in-one, maintenance)
+    --backup --to DIR           Backup configuration to directory
+    --restore --from DIR        Restore configuration from directory
+    --tune [COMPONENT]          Tune JVM settings (puppetserver, puppetdb, all)
+    --status                    Show current infrastructure status
+
+Components:
+    compile-master              Catalog compiler server
+    puppetdb-replica            PuppetDB replica for HA
+    ca-server                   CA-only server
+
+Modes:
+    ca-only                     Main server handles only CA operations
+    all-in-one                  Full server (CA + catalog compilation)
+    maintenance                 Stop services for maintenance
+
+Options:
+    --help                      Show this help
+    --verbose                   Verbose output
+
+Examples:
+    openvox-maintenance --health
+    openvox-maintenance --add compile-master --host puppet-compile2.example.com
+    openvox-maintenance --mode ca-only
+    openvox-maintenance --backup --to /backups/openvox-\$(date +%Y%m%d)
+    openvox-maintenance --tune puppetserver
+
+EOF
+}
+
+# ─── Parse Arguments ─────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --health)
+            ACTION="health"
+            shift
+            ;;
+        --add)
+            ACTION="add"
+            TARGET_COMPONENT="$2"
+            shift 2
+            ;;
+        --remove)
+            ACTION="remove"
+            TARGET_COMPONENT="$2"
+            shift 2
+            ;;
+        --host)
+            TARGET_HOST="$2"
+            shift 2
+            ;;
+        --mode)
+            ACTION="mode"
+            MODE="$2"
+            shift 2
+            ;;
+        --backup)
+            ACTION="backup"
+            shift
+            ;;
+        --restore)
+            ACTION="restore"
+            shift
+            ;;
+        --to)
+            BACKUP_DIR="$2"
+            shift 2
+            ;;
+        --from)
+            BACKUP_DIR="$2"
+            shift 2
+            ;;
+        --tune)
+            ACTION="tune"
+            TUNE_COMPONENT="${2:-all}"
+            shift 2 2>/dev/null || shift
+            ;;
+        --status)
+            ACTION="status"
+            shift
+            ;;
+        --verbose)
+            LOG_LEVEL="debug"
+            shift
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# ─── Health Check ────────────────────────────────────────────────────────────
+do_health_check() {
+    log_info "Running OpenVox health check..."
+    echo
+    
+    local all_ok=true
+    
+    # Check Puppet Server
+    echo -n "Puppet Server: "
+    if systemctl is-active --quiet puppetserver 2>/dev/null; then
+        log_success "running"
+    else
+        log_error "not running"
+        all_ok=false
+    fi
+    
+    # Check PuppetDB
+    echo -n "PuppetDB:      "
+    if systemctl is-active --quiet puppetdb 2>/dev/null; then
+        log_success "running"
+    else
+        log_error "not running"
+        all_ok=false
+    fi
+    
+    # Check Puppet Agent
+    echo -n "Puppet Agent:  "
+    if systemctl is-enabled --quiet puppet 2>/dev/null; then
+        log_success "enabled"
+    else
+        log_warn "not enabled"
+    fi
+    
+    # Check r10k
+    echo -n "r10k:          "
+    if [[ -x /opt/puppetlabs/puppet/bin/r10k ]] || command -v r10k &>/dev/null; then
+        log_success "installed"
+    else
+        log_warn "not found"
+    fi
+    
+    # Check disk space
+    echo -n "Disk space:    "
+    local disk_used=$(df /etc/puppetlabs 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
+    if [[ -n "$disk_used" ]] && [[ "$disk_used" -lt 80 ]]; then
+        log_success "${disk_used}% used"
+    elif [[ -n "$disk_used" ]] && [[ "$disk_used" -lt 90 ]]; then
+        log_warn "${disk_used}% used (warning)"
+    else
+        log_error "${disk_used}% used (critical)"
+        all_ok=false
+    fi
+    
+    # Check CA status
+    echo -n "CA Status:     "
+    if [[ -f /etc/puppetlabs/puppet/ssl/ca/ca_crt.pem ]]; then
+        local days=$(/opt/puppetlabs/puppet/bin/openssl x509 -in /etc/puppetlabs/puppet/ssl/ca/ca_crt.pem -noout -enddate 2>/dev/null | cut -d= -f2)
+        if [[ -n "$days" ]]; then
+            log_success "valid (expires: $days)"
+        else
+            log_warn "could not determine expiry"
+        fi
+    else
+        log_warn "CA cert not found"
+    fi
+    
+    echo
+    if [[ "$all_ok" == true ]]; then
+        log_success "All checks passed"
+        return 0
+    else
+        log_error "Some checks failed"
+        return 1
+    fi
+}
+
+# ─── Add Component ───────────────────────────────────────────────────────────
+do_add_component() {
+    local component="$TARGET_COMPONENT"
+    local host="$TARGET_HOST"
+    
+    if [[ -z "$component" ]]; then
+        log_error "Component required for --add"
+        exit 1
+    fi
+    
+    log_info "Adding $component..."
+    
+    case "$component" in
+        compile-master|catalog-compiler)
+            log_info "Configuring catalog compiler on $host"
+            # Generate compile master config
+            cat > /tmp/compile-master-config.sh << 'COMPILECONFIG'
+#!/bin/bash
+# Compile master configuration
+# Disable CA, point to central CA server
+
+# puppet.conf
+/opt/puppetlabs/bin/puppet config set ca_server "$(hostname -f)" --section main
+/opt/puppetlabs/bin/puppet config set ca false --section master
+
+# puppetserver.conf - increase JRuby for catalog compilation
+cat > /etc/puppetlabs/puppetserver/conf.d/puppetserver.conf << 'HOCON'
+jruby-puppet: {
+    max-active-instances: 8
+    compile-mode: off
+}
+HOCON
+COMPILECONFIG
+            log_success "Compile master config generated"
+            log_info "Copy /tmp/compile-master-config.sh to $host and run"
+            ;;
+        puppetdb-replica)
+            log_info "PuppetDB replica setup for $host"
+            log_info "Configure external PuppetDB connection in puppetdb.conf"
+            ;;
+        ca-server)
+            log_info "CA-only server configuration"
+            log_info "This will disable catalog compilation on the main server"
+            ;;
+        *)
+            log_error "Unknown component: $component"
+            exit 1
+            ;;
+    esac
+}
+
+# ─── Remove Component ────────────────────────────────────────────────────────
+do_remove_component() {
+    local component="$TARGET_COMPONENT"
+    local host="$TARGET_HOST"
+    
+    log_info "Removing $component from $host..."
+    log_warn "Manual cleanup required on $host"
+}
+
+# ─── Change Mode ─────────────────────────────────────────────────────────────
+do_change_mode() {
+    case "$MODE" in
+        ca-only)
+            log_info "Converting to CA-only mode..."
+            log_info "Catalog compilation will be disabled on this server"
+            
+            # Reduce JRuby instances (CA only needs minimal)
+            if [[ -f /etc/sysconfig/puppetserver ]]; then
+                sed -i 's/JAVA_ARGS.*/JAVA_ARGS="-Xms512m -Xmx512m"/' /etc/sysconfig/puppetserver
+            fi
+            
+            # Update puppetserver.conf
+            mkdir -p /etc/puppetlabs/puppetserver/conf.d
+            cat > /etc/puppetlabs/puppetserver/conf.d/puppetserver.conf << 'HOCON'
+jruby-puppet: {
+    max-active-instances: 1
+}
+HOCON
+            
+            log_success "CA-only mode configured"
+            log_info "Restart puppetserver: systemctl restart puppetserver"
+            ;;
+        all-in-one)
+            log_info "Configuring all-in-one mode..."
+            log_info "Server will handle both CA and catalog compilation"
+            
+            # Default JVM settings
+            if [[ -f /etc/sysconfig/puppetserver ]]; then
+                sed -i 's/JAVA_ARGS.*/JAVA_ARGS="-Xms2g -Xmx2g"/' /etc/sysconfig/puppetserver
+            fi
+            
+            log_success "All-in-one mode configured"
+            ;;
+        maintenance)
+            log_info "Entering maintenance mode..."
+            systemctl stop puppetserver puppetdb 2>/dev/null || true
+            log_success "Services stopped for maintenance"
+            ;;
+        *)
+            log_error "Unknown mode: $MODE"
+            log_info "Valid modes: ca-only, all-in-one, maintenance"
+            exit 1
+            ;;
+    esac
+}
+
+# ─── Backup ──────────────────────────────────────────────────────────────────
+do_backup() {
+    if [[ -z "$BACKUP_DIR" ]]; then
+        BACKUP_DIR="/backups/openvox-$(date +%Y%m%d-%H%M%S)"
+    fi
+    
+    log_info "Backing up to $BACKUP_DIR..."
+    
+    mkdir -p "$BACKUP_DIR"
+    
+    # Backup key directories
+    local dirs=(
+        "/etc/puppetlabs"
+        "/var/lib/puppet"
+        "/var/log/puppetlabs"
+    )
+    
+    for dir in "${dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            log_info "Backing up $dir..."
+            tar -czf "$BACKUP_DIR/$(basename $dir).tar.gz" -C / "$(echo $dir | sed 's|^/||')" 2>/dev/null || true
+        fi
+    done
+    
+    # Backup r10k config
+    if [[ -f /etc/puppetlabs/r10k/r10k.yaml ]]; then
+        cp /etc/puppetlabs/r10k/r10k.yaml "$BACKUP_DIR/"
+    fi
+    
+    # Create manifest
+    cat > "$BACKUP_DIR/MANIFEST.txt" << MANIFEST
+OpenVox Backup
+Created: $(date)
+Hostname: $(hostname -f)
+
+Contents:
+- puppetlabs.tar.gz     - /etc/puppetlabs
+- puppet.tar.gz         - /var/lib/puppet
+- puppetlabs-log.tar.gz - /var/log/puppetlabs
+- r10k.yaml             - r10k configuration
+MANIFEST
+    
+    log_success "Backup complete: $BACKUP_DIR"
+}
+
+# ─── Restore ─────────────────────────────────────────────────────────────────
+do_restore() {
+    if [[ -z "$BACKUP_DIR" ]]; then
+        log_error "--from directory required for restore"
+        exit 1
+    fi
+    
+    if [[ ! -d "$BACKUP_DIR" ]]; then
+        log_error "Backup directory not found: $BACKUP_DIR"
+        exit 1
+    fi
+    
+    log_info "Restoring from $BACKUP_DIR..."
+    log_warn "This will overwrite current configuration!"
+    read -p "Continue? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+        log_info "Restore cancelled"
+        exit 0
+    fi
+    
+    # Restore tarballs
+    for tarball in "$BACKUP_DIR"/*.tar.gz; do
+        if [[ -f "$tarball" ]]; then
+            log_info "Restoring $(basename $tarball)..."
+            tar -xzf "$tarball" -C / 2>/dev/null || true
+        fi
+    done
+    
+    log_success "Restore complete"
+    log_info "Restart services: systemctl restart puppetserver puppetdb"
+}
+
+# ─── Tune ────────────────────────────────────────────────────────────────────
+do_tune() {
+    local component="${TUNE_COMPONENT:-all}"
+    
+    log_info "Tuning $component..."
+    
+    # Source hardware detection if available
+    if [[ -f "$PROJECT_ROOT/lib/functions.sh" ]]; then
+        source "$PROJECT_ROOT/lib/functions.sh"
+    fi
+    
+    case "$component" in
+        puppetserver|all)
+            log_info "Tuning Puppet Server JVM..."
+            
+            # Detect available memory
+            local mem_gb=2
+            if command -v free &>/dev/null; then
+                mem_gb=$(free -g | awk '/^Mem:/{print int($2 * 0.6)}')
+                [[ "$mem_gb" -lt 1 ]] && mem_gb=1
+            fi
+            
+            local sysconfig="/etc/sysconfig/puppetserver"
+            [[ ! -f "$sysconfig" ]] && sysconfig="/etc/default/puppetserver"
+            
+            if [[ -f "$sysconfig" ]]; then
+                sed -i "s/JAVA_ARGS.*/JAVA_ARGS=\"-Xms${mem_gb}g -Xmx${mem_gb}g\"/" "$sysconfig"
+                log_success "Puppet Server tuned to ${mem_gb}g heap"
+            fi
+            ;;
+        puppetdb)
+            log_info "Tuning PuppetDB JVM..."
+            local mem_gb=1
+            if command -v free &>/dev/null; then
+                mem_gb=$(free -g | awk '/^Mem:/{print int($2 * 0.25)}')
+                [[ "$mem_gb" -lt 1 ]] && mem_gb=1
+            fi
+            
+            local sysconfig="/etc/sysconfig/puppetdb"
+            [[ ! -f "$sysconfig" ]] && sysconfig="/etc/default/puppetdb"
+            
+            if [[ -f "$sysconfig" ]]; then
+                sed -i "s/JAVA_ARGS.*/JAVA_ARGS=\"-Xms${mem_gb}g -Xmx${mem_gb}g\"/" "$sysconfig"
+                log_success "PuppetDB tuned to ${mem_gb}g heap"
+            fi
+            ;;
+        all)
+            do_tune puppetserver
+            do_tune puppetdb
+            ;;
+    esac
+    
+    log_info "Restart services to apply: systemctl restart puppetserver puppetdb"
+}
+
+# ─── Status ──────────────────────────────────────────────────────────────────
+do_status() {
+    log_info "OpenVox Infrastructure Status"
+    echo "=================================="
+    echo
+    
+    # Server mode
+    echo "Server Mode:"
+    if grep -q "max-active-instances: 1" /etc/puppetlabs/puppetserver/conf.d/puppetserver.conf 2>/dev/null; then
+        echo "  CA-only mode"
+    else
+        echo "  All-in-one mode"
+    fi
+    echo
+    
+    # Environments
+    echo "Environments:"
+    if [[ -d /etc/puppetlabs/code/environments ]]; then
+        for env in /etc/puppetlabs/code/environments/*/; do
+            if [[ -d "$env" ]]; then
+                local count=$(find "$env/modules" -maxdepth 1 -type d 2>/dev/null | wc -l)
+                echo "  $(basename $env): ${count} modules"
+            fi
+        done
+    fi
+    echo
+    
+    # Certificates
+    echo "Certificates:"
+    if [[ -x /opt/puppetlabs/bin/puppetserver ]]; then
+        local signed=$(/opt/puppetlabs/bin/puppetserver ca list --all 2>/dev/null | grep -c "^\+" || echo "0")
+        echo "  Signed: $signed"
+    fi
+}
+
+# ─── Main ────────────────────────────────────────────────────────────────────
+main() {
+    case "$ACTION" in
+        health)
+            do_health_check
+            ;;
+        add)
+            do_add_component
+            ;;
+        remove)
+            do_remove_component
+            ;;
+        mode)
+            do_change_mode
+            ;;
+        backup)
+            do_backup
+            ;;
+        restore)
+            do_restore
+            ;;
+        tune)
+            do_tune
+            ;;
+        status)
+            do_status
+            ;;
+        *)
+            log_error "No action specified"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

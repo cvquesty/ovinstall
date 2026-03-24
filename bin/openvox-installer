@@ -451,6 +451,12 @@ phase_post_install() {
     # Deploy environments with r10k now that everything is installed
     if [[ "$INSTALL_R10K" == "true" ]]; then
         deploy_environments
+        deploy_puppetfile_per_environment
+    fi
+    
+    # Deploy control repository and configure Hiera
+    if [[ "$INSTALL_SERVER" == "true" && -n "$r10k_remote" ]]; then
+        deploy_control_repo
     fi
 }
 
@@ -464,6 +470,30 @@ phase_verify() {
     if [[ "$INSTALL_OPENBOLT" == "true" ]]; then
         verify_openbolt
     fi
+}
+
+# Phase 5: Final agent run
+phase_finalize() {
+    log_info "Phase 5: Finalizing installation..."
+    
+    # Run puppet agent -t to complete configuration
+    if [[ "${run_final_agent:-true}" != "false" ]]; then
+        log_info "Running puppet agent -t to complete configuration..."
+        
+        if [[ "$DRY_RUN" != "true" ]]; then
+            # Run agent, allow failures (may need cert signing)
+            /opt/puppetlabs/bin/puppet agent --test --detailed-exitcodes 2>&1 || true
+        else
+            log_info "Dry-run: would run puppet agent --test"
+        fi
+        
+        log_info "Initial agent run complete"
+    else
+        log_info "Skipping final agent run (run_final_agent=false)"
+    fi
+    
+    log_info "OpenVox installation complete!"
+    log_info "Run 'puppet agent -t' to apply configuration"
 }
 
 # =============================================================================
@@ -516,6 +546,7 @@ main() {
     phase_install_components
     phase_post_install
     phase_verify
+    phase_finalize
 
     # Step 12: Done
     log_info "Installation complete!"

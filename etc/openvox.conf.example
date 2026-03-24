@@ -87,8 +87,39 @@
 # Default: permissive
 # selinux = permissive
 
+# --- Client Platform Support -------------------------------------------------
+
+# Enable download caching for fleet deployments
+# When enabled, packages are cached locally for agent bootstraps
+# Default: false
+# download_cache_enabled = false
+# download_cache_dir = /var/cache/openvox-installer
+# download_cache_max_age_days = 7
+
+# --- Modularity (Future Growth) ----------------------------------------------
+
+# Server role: all-in-one, ca-only, compile-master
+# all-in-one: Full server (CA + catalog compilation)
+# ca-only: Only handle certificate operations (no compilation)
+# compile-master: Catalog compilation only (points to external CA)
+# Default: all-in-one
+# server_role = all-in-one
+
+# Catalog compiler hosts (comma-separated, for future use)
+# compile_masters = puppet-compile1.example.com,puppet-compile2.example.com
+
 # --- Logging -----------------------------------------------------------------
 
 # Log level: debug, info, warning, error
 # Default: info
 # log_level = info
+
+# --- Finalization ------------------------------------------------------------
+
+# Run puppet agent -t after installation
+# Default: true
+# run_final_agent = true
+
+# Environments to configure (comma-separated)
+# Default: production
+# environments = production,development,staging
