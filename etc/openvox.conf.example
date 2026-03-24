@@ -1,5 +1,5 @@
 # =============================================================================
-# OpenVox Installer Configuration
+# ovinstall Configuration
 # =============================================================================
 # Copy this file to /etc/openvox/openvox.conf and modify as needed.
 #
@@ -93,7 +93,7 @@
 # When enabled, packages are cached locally for agent bootstraps
 # Default: false
 # download_cache_enabled = false
-# download_cache_dir = /var/cache/openvox-installer
+# download_cache_dir = /var/cache/ovinstall
 # download_cache_max_age_days = 7
 
 # --- Modularity (Future Growth) ----------------------------------------------

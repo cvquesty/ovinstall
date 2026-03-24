@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Project Name:** openvox-installer  
+**Project Name:** ovinstall  
 **Type:** Bash-based automated installation tool  
 **Purpose:** Fully automated installation of the complete OpenVox server stack (Agent, Server, PuppetDB, r10k, OpenBolt, OpenVox-GUI) using yum.voxpupuli.org and apt.voxpupuli.org repositories  
 **Configuration:** INI-style configuration file  
@@ -181,9 +181,9 @@ log_level = info
 ## File Structure
 
 ```
-openvox-installer/
+ovinstall/
 ├── bin/
-│   └── openvox-installer       # Main installer script (entry point)
+│   └── ovinstall       # Main installer script (entry point)
 ├── etc/
 │   └── openvox.conf.example    # Example configuration file
 ├── lib/
@@ -272,36 +272,36 @@ START
 
 ```bash
 # Interactive install (prompts for required values)
-sudo ./bin/openvox-installer
+sudo ./bin/ovinstall
 
 # Specify custom config
-sudo ./bin/openvox-installer -c /path/to/openvox.conf
+sudo ./bin/ovinstall -c /path/to/openvox.conf
 
 # Install specific components
-sudo ./bin/openvox-installer --agent
-sudo ./bin/openvox-installer --server
-sudo ./bin/openvox-installer --gui
-sudo ./bin/openvox-installer --openbolt
+sudo ./bin/ovinstall --agent
+sudo ./bin/ovinstall --server
+sudo ./bin/ovinstall --gui
+sudo ./bin/ovinstall --openbolt
 
 # Installation modes
-sudo ./bin/openvox-installer --mode agent
-sudo ./bin/openvox-installer --mode server
-sudo ./bin/openvox-installer --mode complete
+sudo ./bin/ovinstall --mode agent
+sudo ./bin/ovinstall --mode server
+sudo ./bin/ovinstall --mode complete
 
 # Dry-run mode (show what would happen)
-sudo ./bin/openvox-installer --dry-run
+sudo ./bin/ovinstall --dry-run
 
 # Skip preflight checks
-sudo ./bin/openvox-installer --skip-preflight
+sudo ./bin/ovinstall --skip-preflight
 
 # Force reinstallation
-sudo ./bin/openvox-installer --force
+sudo ./bin/ovinstall --force
 
 # Non-interactive mode (no prompts)
-sudo ./bin/openvox-installer --non-interactive
+sudo ./bin/ovinstall --non-interactive
 
 # Show help
-./bin/openvox-installer --help
+./bin/ovinstall --help
 ```
 
 ---

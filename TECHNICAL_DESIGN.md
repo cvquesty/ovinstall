@@ -1,4 +1,4 @@
-# 🏗️ OpenVox Installer — Technical Design Document
+# 🏗️ ovinstall — Technical Design Document
 
 > *A production-ready, modular installer for OpenVox infrastructure.*
 >
@@ -124,9 +124,9 @@ This document describes the technical design for a production-ready OpenVox inst
 ### 2.1 Directory Layout
 
 ```
-openvox-installer/
+ovinstall/
 ├── bin/
-│   └── openvox-installer          # Main entry point (Python or bash)
+│   └── ovinstall          # Main entry point (Python or bash)
 │
 ├── lib/
 │   ├── core/
@@ -204,7 +204,7 @@ class Module:
 
 ### 2.3 State Management
 
-The installer tracks installation state in a JSON file (e.g., `/var/lib/openvox-installer/state.json`):
+The installer tracks installation state in a JSON file (e.g., `/var/lib/ovinstall/state.json`):
 
 ```json
 {
@@ -732,7 +732,7 @@ EOF
 class DownloadCache:
     """Cache downloaded packages for fleet deployment."""
 
-    def __init__(self, cache_dir="/var/cache/openvox-installer"):
+    def __init__(self, cache_dir="/var/cache/ovinstall"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -754,7 +754,7 @@ class DownloadCache:
 # openvox.conf
 [download_cache]
 enabled = true
-cache_dir = /var/cache/openvox-installer
+cache_dir = /var/cache/ovinstall
 max_age_days = 7
 ```
 
@@ -770,22 +770,22 @@ max_age_days = 7
 
 ```bash
 # Add a compile master
-openvox-maintenance --add compile-master --host puppet-compile2
+ovinstall-maintenance --add compile-master --host puppet-compile2
 
 # Remove a compile master
-openvox-maintenance --remove compile-master --host puppet-compile2
+ovinstall-maintenance --remove compile-master --host puppet-compile2
 
 # Scale PuppetDB (add replica)
-openvox-maintenance --add puppetdb-replica --host puppetdb2
+ovinstall-maintenance --add puppetdb-replica --host puppetdb2
 
 # Check health of all components
-openvox-maintenance --health
+ovinstall-maintenance --health
 
 # Backup configuration
-openvox-maintenance --backup --to /backups/openvox-20240324
+ovinstall-maintenance --backup --to /backups/openvox-20240324
 
 # Restore from backup
-openvox-maintenance --restore --from /backups/openvox-20240324
+ovinstall-maintenance --restore --from /backups/openvox-20240324
 ```
 
 **Implementation:**
@@ -875,10 +875,10 @@ On `--apply` failure, installer can rollback:
 
 ```bash
 # Automatic rollback on error
-openvox-installer --apply --rollback-on-error
+ovinstall --apply --rollback-on-error
 
 # Manual rollback
-openvox-installer --rollback
+ovinstall --rollback
 ```
 
 Rollback restores:
@@ -944,7 +944,7 @@ autosign = false
 
 # ─── Download Cache ──────────────────────────────────────────────
 download_cache.enabled = true
-download_cache.cache_dir = /var/cache/openvox-installer
+download_cache.cache_dir = /var/cache/ovinstall
 download_cache.max_age_days = 7
 
 # ─── Extensions (future) ─────────────────────────────────────────

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - Agent Installation
+# ovinstall - Agent Installation
 # =============================================================================
 # Installs and configures openvox-agent (Puppet agent).
 # Requires: functions.sh (logging, package helpers)

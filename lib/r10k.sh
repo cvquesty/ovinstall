@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - r10k Component
+# ovinstall - r10k Component
 # =============================================================================
 # r10k is a Puppet code deployment tool that manages Git-based environments.
 # It requires:

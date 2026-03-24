@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - Common Functions Library
+# ovinstall - Common Functions Library
 # =============================================================================
 # Provides shared utilities for all component installers:
 # - Logging functions (console + file)

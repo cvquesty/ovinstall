@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - Server Installation
+# ovinstall - Server Installation
 # =============================================================================
 # Installs and configures openvox-server (PuppetServer).
 # Requires: functions.sh (logging, package helpers, OS detection)

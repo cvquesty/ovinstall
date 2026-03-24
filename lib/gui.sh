@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - OpenVox-GUI Installation
+# ovinstall - OpenVox-GUI Installation
 # =============================================================================
 # Clones the OpenVox-GUI repository and runs its built-in installer.
 # Requires: functions.sh (logging), git

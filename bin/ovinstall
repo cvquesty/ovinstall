@@ -1,18 +1,18 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - Interactive or non-interactive installer for OpenVox stack
+# ovinstall - Interactive or non-interactive installer for OpenVox stack
 # =============================================================================
 # Automated installer for the OpenVox stack (Puppet + components).
 #
 # Usage:
 #   Interactive mode (prompts for all required values):
-#     sudo ./bin/openvox-installer
+#     sudo ./bin/ovinstall
 #
 #   Non-interactive mode (uses CLI flags or config file):
-#     sudo ./bin/openvox-installer --mode complete --non-interactive
-#     sudo ./bin/openvox-installer --config /etc/openvox/openvox.conf
-#     sudo ./bin/openvox-installer --agent
+#     sudo ./bin/ovinstall --mode complete --non-interactive
+#     sudo ./bin/ovinstall --config /etc/openvox/openvox.conf
+#     sudo ./bin/ovinstall --agent
 #
 # Run with --help for full option list.
 # =============================================================================
@@ -91,7 +91,7 @@ EXPLICIT_COMPONENTS=false
 usage() {
     local exit_code="${1:-0}"
     cat << EOF
-OpenVox Installer - Automated OpenVox Stack Installation
+ovinstall - Automated OpenVox Stack Installation
 
 Usage: $0 [OPTIONS]
 

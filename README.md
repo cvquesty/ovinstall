@@ -1,4 +1,4 @@
-# OpenVox Installer
+# ovinstall
 
 Automated bash-based installer for the complete OpenVox stack (Puppet + components).
 
@@ -38,24 +38,24 @@ This project provides a fully automated bash installer for deploying OpenVox inf
 ### Interactive Installation (Prompts for Required Values)
 
 ```bash
-git clone https://github.com/cvquesty/openvox-installer.git
-cd openvox-installer
+git clone https://github.com/cvquesty/ovinstall.git
+cd ovinstall
 
 # Run the installer — will prompt for server hostname, r10k URL, etc.
-sudo ./bin/openvox-installer
+sudo ./bin/ovinstall
 ```
 
 ### Non-Interactive Installation (Automated/Scripted)
 
 ```bash
 # With command-line flags
-sudo ./bin/openvox-installer --mode complete --non-interactive
+sudo ./bin/ovinstall --mode complete --non-interactive
 
 # With a configuration file
 sudo mkdir -p /etc/openvox
 sudo cp etc/openvox.conf.example /etc/openvox/openvox.conf
 # Edit the config file with your values…
-sudo ./bin/openvox-installer --config /etc/openvox/openvox.conf --non-interactive
+sudo ./bin/ovinstall --config /etc/openvox/openvox.conf --non-interactive
 ```
 
 ## Installation Modes
@@ -74,28 +74,28 @@ sudo ./bin/openvox-installer --config /etc/openvox/openvox.conf --non-interactiv
 
 ```bash
 # Interactive (prompts for required values)
-sudo ./bin/openvox-installer
+sudo ./bin/ovinstall
 
 # Non-interactive with all defaults
-sudo ./bin/openvox-installer --mode complete --non-interactive
+sudo ./bin/ovinstall --mode complete --non-interactive
 
 # Agent only
-sudo ./bin/openvox-installer --agent
+sudo ./bin/ovinstall --agent
 
 # Server with r10k (requires r10k_remote in config or prompt)
-sudo ./bin/openvox-installer --server
+sudo ./bin/ovinstall --server
 
 # Just the GUI
-sudo ./bin/openvox-installer --gui
+sudo ./bin/ovinstall --gui
 
 # Dry-run (preview what would be installed)
-sudo ./bin/openvox-installer --dry-run
+sudo ./bin/ovinstall --dry-run
 
 # Custom config file
-sudo ./bin/openvox-installer --config /path/to/openvox.conf
+sudo ./bin/ovinstall --config /path/to/openvox.conf
 
 # Verbose output for debugging
-sudo ./bin/openvox-installer --verbose
+sudo ./bin/ovinstall --verbose
 ```
 
 ## Command-Line Options
@@ -163,9 +163,9 @@ Example URLs:
 ## Project Structure
 
 ```
-openvox-installer/
+ovinstall/
 ├── bin/
-│   └── openvox-installer       # Main entry point
+│   └── ovinstall       # Main entry point
 ├── lib/
 │   ├── functions.sh            # Common functions (logging, OS detection, repos, etc.)
 │   ├── agent.sh                # OpenVox Agent installer
@@ -265,7 +265,7 @@ This project differs from the Bolt-based approach:
 ### Verbose Output
 
 ```bash
-sudo ./bin/openvox-installer --verbose
+sudo ./bin/ovinstall --verbose
 ```
 
 ### Log File

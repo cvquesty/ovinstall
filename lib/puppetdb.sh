@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Installer - PuppetDB Installation
+# ovinstall - PuppetDB Installation
 # =============================================================================
 # Installs and configures PuppetDB with a PostgreSQL backend.
 # By default uses an internal (local) PostgreSQL instance.

@@ -1,19 +1,19 @@
 #!/bin/bash
 #
 # =============================================================================
-# OpenVox Maintenance Script
+# ovinstall Maintenance Script
 # =============================================================================
 # Manage OpenVox infrastructure scaling and maintenance.
 #
 # Usage:
-#   openvox-maintenance --health
-#   openvox-maintenance --add compile-master --host puppet-compile2
-#   openvox-maintenance --remove compile-master --host puppet-compile2
-#   openvox-maintenance --mode ca-only
-#   openvox-maintenance --mode all-in-one
-#   openvox-maintenance --backup --to /backups/openvox-20240324
-#   openvox-maintenance --restore --from /backups/openvox-20240324
-#   openvox-maintenance --tune
+#   ovinstall-maintenance --health
+#   ovinstall-maintenance --add compile-master --host puppet-compile2
+#   ovinstall-maintenance --remove compile-master --host puppet-compile2
+#   ovinstall-maintenance --mode ca-only
+#   ovinstall-maintenance --mode all-in-one
+#   ovinstall-maintenance --backup --to /backups/openvox-20240324
+#   ovinstall-maintenance --restore --from /backups/openvox-20240324
+#   ovinstall-maintenance --tune
 #
 # =============================================================================
 
@@ -44,9 +44,9 @@ log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 # ─── Usage ───────────────────────────────────────────────────────────────────
 usage() {
     cat << EOF
-OpenVox Maintenance Script - Scale and maintain OpenVox infrastructure
+ovinstall Maintenance Script - Scale and maintain OpenVox infrastructure
 
-Usage: openvox-maintenance [OPTIONS]
+Usage: ovinstall-maintenance [OPTIONS]
 
 Actions:
     --health                    Check health of all OpenVox components
@@ -73,11 +73,11 @@ Options:
     --verbose                   Verbose output
 
 Examples:
-    openvox-maintenance --health
-    openvox-maintenance --add compile-master --host puppet-compile2.example.com
-    openvox-maintenance --mode ca-only
-    openvox-maintenance --backup --to /backups/openvox-\$(date +%Y%m%d)
-    openvox-maintenance --tune puppetserver
+    ovinstall-maintenance --health
+    ovinstall-maintenance --add compile-master --host puppet-compile2.example.com
+    ovinstall-maintenance --mode ca-only
+    ovinstall-maintenance --backup --to /backups/openvox-\$(date +%Y%m%d)
+    ovinstall-maintenance --tune puppetserver
 
 EOF
 }
