@@ -99,7 +99,8 @@ EOF
 verify_openbolt() {
     if command -v bolt &>/dev/null; then
         log_info "OpenBolt version: $(bolt --version)"
-    else
-        log_warn "OpenBolt command not found in PATH"
+        return 0
     fi
+    log_error "OpenBolt command not found in PATH"
+    return 1
 }
