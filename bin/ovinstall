@@ -398,9 +398,15 @@ EOF
     Puppet Server:
     - Server is running on port 8140
     - Sign certificates: puppetserver ca sign --all
+
+EOF
+        # Only mention the password file when it actually exists (server+PuppetDB path).
+        if [[ -f /etc/openvox/puppetdb_password ]]; then
+            cat << EOF
     - PuppetDB database password file: /etc/openvox/puppetdb_password
 
 EOF
+        fi
     fi
 
     if [[ "$INSTALL_GUI" == "true" ]]; then
