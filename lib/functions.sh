@@ -277,7 +277,7 @@ check_disk_space() {
     available_mb=$(df -m / | awk 'NR==2 {print $4}')
 
     if [[ "$available_mb" -lt "$required_mb" ]]; then
-        log_error "Insufficient disk space. Required: ${required_mb}MB, Available: ${available_mb}MB"
+        log_error "Insufficient disk space. Required: ${required_mb}MB, Available: ${available_mb}MB. Free space on / (or install to a volume with more room) and re-run."
         return 1
     fi
 
@@ -300,7 +300,7 @@ check_network() {
 
     for host in "${test_hosts[@]}"; do
         if ! timeout 5 bash -c "echo >/dev/tcp/$host/443" 2>/dev/null; then
-            log_warn "Cannot reach $host on port 443"
+            log_warn "Cannot reach $host on port 443 — install continues, but package/repo downloads may fail. Check DNS, proxy, and outbound HTTPS."
         fi
     done
 
