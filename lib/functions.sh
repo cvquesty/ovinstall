@@ -36,7 +36,8 @@ PACKAGE_MANAGER=""    # Package manager command: yum, apt
 #   server_hostname, r10k_remote, gui_port, install_mode, non_interactive,
 #   certname, runinterval, jvm_memory, log_level, firewall, selinux,
 #   gui_repo_url, gui_repo_ref, allow_untrusted_gui_repo,
-#   bolt_insecure_ssh, puppetdb_database, puppetdb_password
+#   bolt_insecure_ssh, puppetdb_database, puppetdb_password,
+#   run_final_agent
 
 load_config() {
     local config_file="$1"
@@ -88,6 +89,7 @@ load_config() {
             puppetdb_db_port)    puppetdb_db_port="$value" ;;
             puppetdb_db_name)    puppetdb_db_name="$value" ;;
             puppetdb_db_user)    puppetdb_db_user="$value" ;;
+            run_final_agent)     run_final_agent="$value" ;;
             non_interactive|non-interactive)
                 [[ "$value" == "true" || "$value" == "yes" ]] && NONINTERACTIVE=true
                 ;;
@@ -100,6 +102,55 @@ load_config() {
     log_info "Configuration loaded"
 }
 
+
+# =============================================================================
+# SECTION: Configuration Validation (SEC-005)
+# =============================================================================
+# Fail closed on invalid operator-supplied values before install phases run.
+
+_validate_hostname_value() {
+    local name="$1"
+    local label="$2"
+    # Conservative hostname / certname charset: letters, digits, dots, hyphens
+    if [[ ! "$name" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
+        log_fatal "Invalid ${label}: '${name}' (allowed: letters, digits, dots, hyphens)"
+    fi
+    if [[ ${#name} -gt 253 ]]; then
+        log_fatal "Invalid ${label}: exceeds 253 characters"
+    fi
+}
+
+validate_config() {
+    log_debug "Validating configuration values..."
+
+    if [[ -n "${gui_port:-}" ]]; then
+        if [[ ! "$gui_port" =~ ^[0-9]+$ ]] || [[ "$gui_port" -lt 1 || "$gui_port" -gt 65535 ]]; then
+            log_fatal "Invalid gui_port: '${gui_port}' (must be integer 1-65535)"
+        fi
+    fi
+
+    if [[ -n "${jvm_memory:-}" ]]; then
+        if [[ ! "$jvm_memory" =~ ^[0-9]+[gGmMkK]$ ]]; then
+            log_fatal "Invalid jvm_memory: '${jvm_memory}' (expected e.g. 2g, 512m)"
+        fi
+    fi
+
+    if [[ -n "${server_hostname:-}" && "$server_hostname" != "auto" ]]; then
+        _validate_hostname_value "$server_hostname" "server_hostname"
+    fi
+
+    if [[ -n "${certname:-}" && "$certname" != "auto" ]]; then
+        _validate_hostname_value "$certname" "certname"
+    fi
+
+    if [[ -n "${r10k_remote:-}" ]]; then
+        if [[ ! "$r10k_remote" =~ ^(git@[^[:space:]]+|https?://[^[:space:]]+|ssh://[^[:space:]]+)$ ]]; then
+            log_fatal "Invalid r10k_remote: must look like a git URL (git@..., https://..., http://..., or ssh://...)"
+        fi
+    fi
+
+    log_debug "Configuration validation passed"
+}
 # =============================================================================
 # SECTION: Logging Functions
 # =============================================================================
@@ -419,10 +470,17 @@ setup_yum_repo() {
     fi
 
     local repo_url="https://yum.voxpupuli.org/$repo_rpm"
+    local gpg_key_url="https://yum.voxpupuli.org/RPM-GPG-KEY-VoxPupuli"
     log_info "Installing repository package: $repo_url"
 
     local tmp_dir="/tmp/openvox-repo"
     mkdir -p "$tmp_dir"
+
+    # SEC-006: import GPG key before installing the release RPM
+    log_info "Importing Vox Pupuli RPM GPG key before release package install"
+    if ! rpm --import "$gpg_key_url"; then
+        log_fatal "Failed to import GPG key: $gpg_key_url"
+    fi
 
     if curl -fsSL -o "${tmp_dir}/${repo_rpm}" "$repo_url"; then
         rpm -ivh "${tmp_dir}/${repo_rpm}"
@@ -430,7 +488,6 @@ setup_yum_repo() {
         log_fatal "Failed to download repository package: $repo_url"
     fi
 
-    rpm --import https://yum.voxpupuli.org/RPM-GPG-KEY-VoxPupuli
     yum clean metadata
 
     rm -rf "$tmp_dir"
@@ -459,7 +516,8 @@ setup_apt_repo() {
         log_fatal "Failed to download repository package: $repo_url"
     fi
 
-    # Import GPG key using modern keyring (apt-key is deprecated)
+    # Import GPG key using modern keyring (apt-key is deprecated).
+    # Key source: https://apt.voxpupuli.org/GPG-KEY (Vox Pupuli archive signing key).
     local keyring_dir="/usr/share/keyrings"
     mkdir -p "$keyring_dir"
     curl -fsSL https://apt.voxpupuli.org/GPG-KEY \
@@ -479,8 +537,20 @@ setup_apt_repo() {
 configure_firewall() {
     log_info "Configuring firewall..."
 
+    # SEC-012: explicit firewall=false skips rules even if firewalld is active.
+    # Unset keeps today's behavior (configure when firewalld is active).
+    local fw_setting="${firewall:-}"
+    if [[ "$fw_setting" == "false" || "$fw_setting" == "no" || "$fw_setting" == "0" ]]; then
+        log_info "Skipping firewall configuration (firewall=${fw_setting})"
+        return 0
+    fi
+
     if ! systemctl is-active --quiet firewalld 2>/dev/null; then
-        log_debug "firewalld not running, skipping firewall configuration"
+        if [[ "$fw_setting" == "true" || "$fw_setting" == "yes" || "$fw_setting" == "1" ]]; then
+            log_warn "firewall=true but firewalld is not active; no rules applied"
+        else
+            log_debug "firewalld not running, skipping firewall configuration"
+        fi
         return 0
     fi
 
@@ -512,6 +582,37 @@ configure_selinux() {
 
     log_info "Configuring SELinux..."
 
+    local desired="${selinux:-}"
+    if [[ -n "$desired" ]]; then
+        desired="$(echo "$desired" | tr '[:upper:]' '[:lower:]')"
+        case "$desired" in
+            enforcing|permissive|disabled)
+                if command -v setenforce &>/dev/null || command -v getenforce &>/dev/null; then
+                    case "$desired" in
+                        enforcing)
+                            setenforce 1 2>/dev/null || log_warn "Could not set SELinux to enforcing (may require reboot/config)"
+                            ;;
+                        permissive)
+                            setenforce 0 2>/dev/null || log_warn "Could not set SELinux to permissive"
+                            ;;
+                        disabled)
+                            log_warn "selinux=disabled requested: runtime disable is limited; set SELINUX=disabled in /etc/selinux/config and reboot to fully disable"
+                            setenforce 0 2>/dev/null || true
+                            ;;
+                    esac
+                    log_info "SELinux desired mode: $desired (current: $(getenforce 2>/dev/null || echo unknown))"
+                else
+                    log_warn "SELinux tools not available; cannot apply selinux=${desired}"
+                fi
+                ;;
+            *)
+                log_fatal "Invalid selinux value: '${selinux}' (expected enforcing, permissive, or disabled)"
+                ;;
+        esac
+        return 0
+    fi
+
+    # Unset: keep warn-only advice when enforcing
     if command -v getenforce &>/dev/null; then
         local selinux_status
         selinux_status=$(getenforce 2>/dev/null || echo "Unknown")

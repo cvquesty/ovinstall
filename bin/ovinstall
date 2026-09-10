@@ -64,10 +64,10 @@ INSTALL_OPENBOLT=false     # OpenBolt — agentless orchestration
 
 # Behavior flags
 DRY_RUN=false              # Show what would be installed without executing
-FORCE=false                # Reinstall even if already installed
+FORCE=false                # Override unsupported OS/arch gate; continue on finalize agent failure
 SKIP_PREFLIGHT=false       # Skip preflight checks
 NONINTERACTIVE=false       # Don't prompt for user input
-VERBOSE=false              # Verbose output (enables bash debug mode)
+VERBOSE=false              # Verbose output (debug logging only; no bash set -x)
 
 # Logging
 LOG_LEVEL="info"           # debug, info, warning, error
@@ -107,9 +107,9 @@ OPTIONS:
     --openbolt              Install OpenBolt (agentless orchestration)
     --non-interactive       Run without prompting (for scripted installs)
     -d, --dry-run           Show what would be done without executing
-    -f, --force             Force installation even if already installed
+    -f, --force             Override unsupported OS/arch gate; also continue on finalize agent failure
     -s, --skip-preflight    Skip preflight checks
-    -v, --verbose           Verbose output
+    -v, --verbose           Enable debug logging (does not enable bash set -x)
     -h, --help              Show this help message
 
 EXAMPLES:
@@ -211,6 +211,7 @@ parse_args() {
                 ;;
 
             -f|--force)
+                # Explicit insecure/override opt-in — OS/arch gate + finalize continue (systems PR)
                 FORCE=true
                 shift
                 ;;
@@ -221,9 +222,9 @@ parse_args() {
                 ;;
 
             -v|--verbose)
+                # SEC-010: debug logging only — never global set -x (avoids secret leakage)
                 VERBOSE=true
                 LOG_LEVEL="debug"
-                set -x
                 shift
                 ;;
 
@@ -401,6 +402,13 @@ EOF
     - Sign certificates: puppetserver ca sign --all
 
 EOF
+        # Only mention the password file when it actually exists (server+PuppetDB path).
+        if [[ -f /etc/openvox/puppetdb_password ]]; then
+            cat << EOF
+    - PuppetDB database password file: /etc/openvox/puppetdb_password
+
+EOF
+        fi
     fi
 
     if [[ "$INSTALL_GUI" == "true" ]]; then
@@ -448,15 +456,12 @@ phase_post_install() {
     configure_selinux
     configure_services
 
-    # Deploy environments with r10k now that everything is installed
+    # Deploy environments with r10k now that everything is installed.
+    # SEC-008: r10k-only owns /etc/puppetlabs/code/environments — do not also
+    # clone via deploy_control_repo into that basedir.
     if [[ "$INSTALL_R10K" == "true" ]]; then
         deploy_environments
         deploy_puppetfile_per_environment
-    fi
-    
-    # Deploy control repository and configure Hiera
-    if [[ "$INSTALL_SERVER" == "true" && -n "$r10k_remote" ]]; then
-        deploy_control_repo
     fi
 }
 
@@ -532,6 +537,10 @@ main() {
 
     # Step 9: Interactive prompts (skipped if --non-interactive)
     prompt_for_config
+
+    # Step 9b: Validate config values (SEC-005) after prompts so interactive
+    # answers are checked before phases run
+    validate_config
 
     # Step 10: Handle dry-run mode
     if [[ "$DRY_RUN" == "true" ]]; then

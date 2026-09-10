@@ -95,12 +95,16 @@
 # Default: false
 # bolt_insecure_ssh = false
 
-# Configure firewall rules for installed components (firewalld)
-# Default: false
-# firewall = false
+# Configure firewall rules for installed components (firewalld).
+# When unset: if firewalld is active, open ports for installed components.
+# When false/no/0: skip adding rules even if firewalld is active.
+# When true/yes/1: configure rules (warns if firewalld is not active).
+# firewall = true
 
-# SELinux mode (RHEL only): enforcing, permissive, disabled
-# Default: permissive
+# SELinux mode (RHEL only): enforcing, permissive, disabled.
+# When unset: warn-only advice if currently enforcing.
+# When set: apply via setenforce where possible (disabled emits a clear warning;
+# full disable still needs /etc/selinux/config + reboot).
 # selinux = permissive
 
 # --- Client Platform Support -------------------------------------------------

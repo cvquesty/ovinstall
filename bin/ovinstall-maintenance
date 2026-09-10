@@ -28,6 +28,7 @@ TARGET_HOST=""
 MODE=""
 BACKUP_DIR=""
 TUNE_COMPONENT=""
+INCLUDE_PRIVATE_KEYS=false
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -40,6 +41,13 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
+log_fatal() { echo -e "${RED}[FATAL]${NC} $*" >&2; exit 1; }
+
+check_privileges() {
+    if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+        log_fatal "This script must be run as root (use sudo)"
+    fi
+}
 
 # ─── Usage ───────────────────────────────────────────────────────────────────
 usage() {
@@ -69,8 +77,12 @@ Modes:
     maintenance                 Stop services for maintenance
 
 Options:
+    --include-private-keys      Include SSL private keys / CA private key in backup
+                                (default: exclude private key paths when possible)
     --help                      Show this help
-    --verbose                   Verbose output
+    --verbose                   Verbose output (debug logging; no bash set -x)
+
+Note: Must be run as root.
 
 Examples:
     ovinstall-maintenance --health
@@ -131,6 +143,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --status)
             ACTION="status"
+            shift
+            ;;
+        --include-private-keys)
+            INCLUDE_PRIVATE_KEYS=true
             shift
             ;;
         --verbose)
@@ -340,7 +356,12 @@ do_backup() {
     
     log_info "Backing up to $BACKUP_DIR..."
     
+    # SEC-009: restrictive backup directory permissions
     mkdir -p "$BACKUP_DIR"
+    chmod 0700 "$BACKUP_DIR"
+    local old_umask
+    old_umask=$(umask)
+    umask 077
     
     # Backup key directories
     local dirs=(
@@ -348,17 +369,44 @@ do_backup() {
         "/var/lib/puppet"
         "/var/log/puppetlabs"
     )
+
+    # Exclude SSL private keys / CA private key by default
+    local -a tar_excludes=()
+    local keys_note="excluded (default)"
+    if [[ "$INCLUDE_PRIVATE_KEYS" == "true" ]]; then
+        keys_note="INCLUDED (--include-private-keys)"
+        log_warn "Backup will include SSL private keys and CA private key material"
+    else
+        tar_excludes+=(
+            --exclude='puppetlabs/puppet/ssl/private_keys'
+            --exclude='puppetlabs/puppet/ssl/ca/ca_key.pem'
+            --exclude='puppet/ssl/private_keys'
+            --exclude='puppet/ssl/ca/ca_key.pem'
+        )
+        log_info "Excluding SSL private key paths from backup (use --include-private-keys to include)"
+    fi
     
     for dir in "${dirs[@]}"; do
         if [[ -d "$dir" ]]; then
             log_info "Backing up $dir..."
-            tar -czf "$BACKUP_DIR/$(basename $dir).tar.gz" -C / "$(echo $dir | sed 's|^/||')" 2>/dev/null || true
+            local rel="${dir#/}"
+            local out_name
+            out_name="$(basename "$dir")"
+            # /var/log/puppetlabs -> puppetlabs-log to avoid name clash with /etc/puppetlabs
+            if [[ "$dir" == "/var/log/puppetlabs" ]]; then
+                out_name="puppetlabs-log"
+            elif [[ "$dir" == "/var/lib/puppet" ]]; then
+                out_name="puppet"
+            fi
+            tar -czf "$BACKUP_DIR/${out_name}.tar.gz" "${tar_excludes[@]}" -C / "$rel" 2>/dev/null || true
+            chmod 0600 "$BACKUP_DIR/${out_name}.tar.gz" 2>/dev/null || true
         fi
     done
     
     # Backup r10k config
     if [[ -f /etc/puppetlabs/r10k/r10k.yaml ]]; then
         cp /etc/puppetlabs/r10k/r10k.yaml "$BACKUP_DIR/"
+        chmod 0600 "$BACKUP_DIR/r10k.yaml" 2>/dev/null || true
     fi
     
     # Create manifest
@@ -366,6 +414,7 @@ do_backup() {
 OpenVox Backup
 Created: $(date)
 Hostname: $(hostname -f)
+Private keys: ${keys_note}
 
 Contents:
 - puppetlabs.tar.gz     - /etc/puppetlabs
@@ -373,8 +422,11 @@ Contents:
 - puppetlabs-log.tar.gz - /var/log/puppetlabs
 - r10k.yaml             - r10k configuration
 MANIFEST
+    chmod 0600 "$BACKUP_DIR/MANIFEST.txt" 2>/dev/null || true
     
-    log_success "Backup complete: $BACKUP_DIR"
+    umask "$old_umask"
+    chmod 0700 "$BACKUP_DIR"
+    log_success "Backup complete: $BACKUP_DIR (mode 0700)"
 }
 
 # ─── Restore ─────────────────────────────────────────────────────────────────
@@ -501,6 +553,8 @@ do_status() {
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 main() {
+    check_privileges
+
     case "$ACTION" in
         health)
             do_health_check
