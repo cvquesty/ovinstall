@@ -1,0 +1,15 @@
+# ggshield / secret scan caches
+.cache_ggshield
+.ggshield*
+
+# Editor / OS junk
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local override configs / logs
+*.log
+.env
+.env.*
