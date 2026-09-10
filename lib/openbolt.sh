@@ -5,6 +5,8 @@
 # =============================================================================
 # Installs and configures OpenBolt (Bolt) for agentless orchestration.
 # Requires: functions.sh (logging, package helpers)
+#
+# SEC-004: host-key-check defaults to true; false only when bolt_insecure_ssh=true.
 # =============================================================================
 
 install_openbolt() {
@@ -26,6 +28,11 @@ configure_openbolt() {
     mkdir -p "$bolt_dir/plugins"
 
     local hostname="${server_hostname:-localhost}"
+    local host_key_check="true"
+    if [[ "${bolt_insecure_ssh:-false}" == "true" || "${bolt_insecure_ssh:-false}" == "yes" ]]; then
+        host_key_check="false"
+        log_warn "INSECURE: bolt_insecure_ssh=true — OpenBolt SSH host-key-check disabled"
+    fi
 
     # Create bolt-project.yaml configuration
     cat > "$bolt_dir/bolt-project.yaml" << EOF
@@ -42,10 +49,11 @@ inventoryfile: $bolt_dir/inventory.yaml
 
 # SSH configuration
 ssh:
-  host-key-check: false  # Set to true in production
+  host-key-check: ${host_key_check}
   connect-timeout: 30
 
-# Run-as configuration
+# run-as: root is retained for installer compatibility with typical
+# first-boot orchestration; operators should tighten for production.
 run-as: root
 
 # Plugin directory
@@ -81,10 +89,10 @@ groups:
     config:
       transport: ssh
       ssh:
-        host-key-check: false
+        host-key-check: ${host_key_check}
 EOF
 
-    log_info "OpenBolt configuration complete"
+    log_info "OpenBolt configuration complete (host-key-check: ${host_key_check})"
 }
 
 # Verify OpenBolt installation
