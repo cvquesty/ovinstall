@@ -1,5 +1,34 @@
 # 🏗️ ovinstall — Technical Design Document
 
+> **Status (2026-09):** This document mixes **as-built** behavior of the current **bash** installer with **future / aspirational** design.
+>
+> - **As-built today:** `bin/ovinstall`, `bin/ovinstall-maintenance`, and flat `lib/*.sh` modules (not a Python package tree).
+> - **Future / not implemented as described below:** Python `lib/core/` / `lib/modules/*.py`, Jinja templates under `etc/templates/`, automated rollback CLI flags, download-cache proxy module, and several scaling workflows shown as Python sketches.
+>
+> When the narrative below refers to `.py` modules or a directory layout that is not present in this repository, treat it as a **target design**, not a claim about the shipped tree. Prefer [README.md](README.md) and [docs/USAGE.md](docs/USAGE.md) for operator-facing truth.
+
+## 0. As-Built Architecture (bash)
+
+The shipped installer is a bash orchestrator:
+
+| Path | Role |
+|------|------|
+| `bin/ovinstall` | CLI parse, prompts, mode selection, phase orchestration (`v0.3.0` banner) |
+| `bin/ovinstall-maintenance` | Health, status, backup/restore, JVM tune, mode/scale helpers |
+| `lib/functions.sh` | Logging, privileges, preflight, `load_config`, repos, firewall/SELinux helpers, verify |
+| `lib/agent.sh` / `server.sh` / `puppetdb.sh` / `r10k.sh` / `openbolt.sh` / `gui.sh` | Component installers |
+| `lib/control_repo.sh` | Control-repo clone / hiera helpers used in post-install |
+| `etc/openvox.conf.example` | Annotated `key = value` template |
+
+**Install flow (as-built):** parse args → banner → privilege check → logging → preflight → `load_config` → `set_install_mode` → prompts → (optional dry-run) → `phase_setup_repo` → `phase_install_components` → `phase_post_install` → `phase_verify` → `phase_finalize`.
+
+**Modes:** `agent` | `server` | `complete` (see README). Explicit flags (`--agent`, `--server`, `--gui`, `--openbolt`) override mode defaults.
+
+The sections that follow retain the broader design discussion. Sections that name Python modules or absent paths are **future** unless cross-checked against the table above.
+
+---
+
+
 > *A production-ready, modular installer for OpenVox infrastructure.*
 >
 > *From zero to fully-deployed OpenVox server in a single command.*
@@ -120,6 +149,8 @@ This document describes the technical design for a production-ready OpenVox inst
 ---
 
 ## 2. Module Structure
+
+> **Future layout.** The directory tree and Python interfaces in this section are **not** the shipped bash tree. See §0 As-Built Architecture.
 
 ### 2.1 Directory Layout
 

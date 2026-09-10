@@ -96,6 +96,8 @@ log_level = info
 
 ## Installation Phases
 
+> **Status:** Core phases below are implemented in the bash installer (`bin/ovinstall` + `lib/*.sh`). Checkboxes that remain unchecked are retained as a historical checklist; treat items that match shipped behavior as done unless noted under Future Enhancements.
+
 ### Phase 1: Pre-Install Checks
 
 - [ ] Verify OS version and architecture
@@ -183,18 +185,24 @@ log_level = info
 ```
 ovinstall/
 ├── bin/
-│   └── ovinstall       # Main installer script (entry point)
+│   ├── ovinstall                 # Main installer script (entry point)
+│   └── ovinstall-maintenance     # Health, backup, tune, mode helpers
 ├── etc/
-│   └── openvox.conf.example    # Example configuration file
+│   └── openvox.conf.example      # Example configuration file
 ├── lib/
-│   ├── functions.sh            # Common functions (logging, OS detection, repos)
-│   ├── agent.sh                # OpenVox Agent installation
-│   ├── server.sh               # OpenVox Server installation
-│   ├── puppetdb.sh             # PuppetDB installation
-│   ├── r10k.sh                 # r10k installation (server only)
-│   ├── openbolt.sh             # OpenBolt installation
-│   └── gui.sh                  # OpenVox-GUI installation
+│   ├── functions.sh              # Common functions (logging, OS detection, repos)
+│   ├── agent.sh                  # OpenVox Agent installation
+│   ├── server.sh                 # OpenVox Server installation
+│   ├── puppetdb.sh               # PuppetDB installation
+│   ├── r10k.sh                   # r10k installation (server only)
+│   ├── control_repo.sh           # Control repo / hiera helpers
+│   ├── openbolt.sh               # OpenBolt installation
+│   └── gui.sh                    # OpenVox-GUI installation
+├── docs/
+│   └── USAGE.md                  # Operator usage tutorial
+├── LICENSE                       # Apache License 2.0
 ├── PROJECT_PLAN.md
+├── TECHNICAL_DESIGN.md           # As-built + future design notes
 └── README.md
 ```
 
@@ -372,14 +380,17 @@ sudo ./bin/ovinstall --non-interactive
 ## Documentation
 
 Current documentation:
-- `README.md` — Overview, quick start, full option reference, troubleshooting
+- `README.md` — Overview, quick start, CLI/config reference, maintenance, troubleshooting
+- `docs/USAGE.md` — Operator tutorial (clone → install → logs → health check)
 - `PROJECT_PLAN.md` — This file; project specs, roadmap, and test plan
+- `TECHNICAL_DESIGN.md` — As-built bash architecture plus future/aspirational design
 - `etc/openvox.conf.example` — Annotated configuration file reference
+- `LICENSE` — Apache License 2.0
 
 Future documentation (Phase 2):
 - `CHANGELOG.md` — Release notes
-- `LICENSE` — Apache 2.0 license file
 - `CONTRIBUTING.md` — How to contribute
+- Expand tutorials for multi-node / compile-master workflows once implemented
 
 ---
 
