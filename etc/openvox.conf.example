@@ -42,8 +42,17 @@
 # Default: 4567
 # gui_port = 4567
 
-# Git URL to the OpenVox-GUI repository (rarely needs to change)
+# Git URL to the OpenVox-GUI repository.
+# Default/allowlisted: https://github.com/cvquesty/openvox-gui.git
+# (HTTPS or SSH equivalents for that same repo only). Other URLs require
+# allow_untrusted_gui_repo = true (discouraged; logs a loud warning).
 # gui_repo_url = https://github.com/cvquesty/openvox-gui.git
+
+# Git ref (branch/tag/commit) to clone/checkout. Default: main
+# gui_repo_ref = main
+
+# Allow non-allowlisted gui_repo_url (INSECURE). Default: false
+# allow_untrusted_gui_repo = false
 
 # --- Agent Settings ----------------------------------------------------------
 
@@ -67,9 +76,11 @@
 # Default: internal
 # puppetdb_database = internal
 
-# Password for the PuppetDB PostgreSQL user
-# Default: changeme  (CHANGE THIS in production!)
-# puppetdb_password = changeme
+# Password for the PuppetDB PostgreSQL user.
+# Leave unset (or set to empty) to auto-generate a strong password stored at
+# /etc/openvox/puppetdb_password (mode 0600). Do NOT use "changeme" — it is
+# rejected / auto-replaced. If you set one, use >=12 chars of [A-Za-z0-9._-].
+# puppetdb_password =
 
 # External database connection (only used when puppetdb_database = external)
 # puppetdb_db_host = localhost
@@ -78,6 +89,11 @@
 # puppetdb_db_user = puppetdb
 
 # --- Security ----------------------------------------------------------------
+
+# OpenBolt SSH host-key-check is enabled by default. Set true only if you
+# intentionally disable host key verification (INSECURE; emits a warning).
+# Default: false
+# bolt_insecure_ssh = false
 
 # Configure firewall rules for installed components (firewalld)
 # Default: false

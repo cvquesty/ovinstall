@@ -35,7 +35,8 @@ PACKAGE_MANAGER=""    # Package manager command: yum, apt
 # Supported keys (see etc/openvox.conf.example for full reference):
 #   server_hostname, r10k_remote, gui_port, install_mode, non_interactive,
 #   certname, runinterval, jvm_memory, log_level, firewall, selinux,
-#   gui_repo_url, puppetdb_database, puppetdb_password
+#   gui_repo_url, gui_repo_ref, allow_untrusted_gui_repo,
+#   bolt_insecure_ssh, puppetdb_database, puppetdb_password
 
 load_config() {
     local config_file="$1"
@@ -69,6 +70,11 @@ load_config() {
             r10k_remote)         r10k_remote="$value" ;;
             gui_port)            gui_port="$value" ;;
             gui_repo_url)        gui_repo_url="$value" ;;
+            gui_repo_ref)        gui_repo_ref="$value" ;;
+            allow_untrusted_gui_repo)
+                allow_untrusted_gui_repo="$value"
+                ;;
+            bolt_insecure_ssh)   bolt_insecure_ssh="$value" ;;
             install_mode|mode)   INSTALL_MODE="$value" ;;
             certname)            certname="$value" ;;
             runinterval)         runinterval="$value" ;;
