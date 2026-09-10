@@ -47,22 +47,26 @@ install_r10k() {
 # =============================================================================
 # Install r10k Ruby gem. Uses Puppet's bundled gem if available,
 # otherwise uses system gem.
+# SEC-007: pin gem version to reduce supply-chain / unexpected major-version risk.
+
+# Pinned to a concrete recent stable from rubygems.org (update intentionally)
+R10K_GEM_VERSION="5.0.3"
 
 install_r10k_package() {
-    log_info "Installing r10k gem..."
+    log_info "Installing r10k gem (version ${R10K_GEM_VERSION})..."
     
     # Check for Puppet's bundled gem first (preferred)
     if [[ -x /opt/puppetlabs/puppet/bin/gem ]]; then
         log_debug "Using Puppet bundled gem"
-        /opt/puppetlabs/puppet/bin/gem install r10k
+        /opt/puppetlabs/puppet/bin/gem install r10k -v "$R10K_GEM_VERSION"
     elif command -v gem &>/dev/null; then
         log_debug "Using system gem"
-        gem install r10k
+        gem install r10k -v "$R10K_GEM_VERSION"
     else
         log_fatal "Ruby gem command not found"
     fi
     
-    log_info "r10k gem installed"
+    log_info "r10k gem ${R10K_GEM_VERSION} installed"
 }
 
 # =============================================================================
