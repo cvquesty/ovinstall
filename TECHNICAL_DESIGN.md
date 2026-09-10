@@ -17,7 +17,7 @@ The shipped installer is a bash orchestrator:
 | `bin/ovinstall-maintenance` | Health, status, backup/restore, JVM tune, mode/scale helpers |
 | `lib/functions.sh` | Logging, privileges, preflight, `load_config`, repos, firewall/SELinux helpers, verify |
 | `lib/agent.sh` / `server.sh` / `puppetdb.sh` / `r10k.sh` / `openbolt.sh` / `gui.sh` | Component installers |
-| `lib/control_repo.sh` | Control-repo clone / hiera helpers used in post-install |
+| `lib/control_repo.sh` | Control-repo / hiera helpers (as-built dual path; **deprecated** — prefer r10k-only environments ownership) |
 | `etc/openvox.conf.example` | Annotated `key = value` template |
 
 **Install flow (as-built):** parse args → banner → privilege check → logging → preflight → `load_config` → `set_install_mode` → prompts → (optional dry-run) → `phase_setup_repo` → `phase_install_components` → `phase_post_install` → `phase_verify` → `phase_finalize`.

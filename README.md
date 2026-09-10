@@ -116,7 +116,7 @@ For a step-by-step walkthrough, see [docs/USAGE.md](docs/USAGE.md).
 | `--openbolt` | Install OpenBolt |
 | `--non-interactive` | Run without prompting |
 | `-d, --dry-run` | Show what would be done |
-| `-f, --force` | Force installation even if already installed |
+| `-f, --force` | Accepted by the CLI (sets `FORCE`); **not yet consulted** by install paths — does not currently force reinstall |
 | `-s, --skip-preflight` | Skip preflight checks |
 | `-v, --verbose` | Verbose output |
 | `-h, --help` | Show help message |
