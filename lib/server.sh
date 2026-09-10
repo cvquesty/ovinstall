@@ -18,7 +18,9 @@ install_server() {
 
     log_info "Starting PuppetServer..."
     systemctl start puppetserver
-    sleep 10  # Give the JVM time to initialize
+    if ! wait_for_port "127.0.0.1" 8140 120; then
+        log_fatal "PuppetServer did not open port 8140 within 120s"
+    fi
 
     log_info "OpenVox Server installed successfully"
 }

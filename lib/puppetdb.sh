@@ -72,7 +72,9 @@ install_puppetdb() {
 
     log_info "Starting PuppetDB..."
     systemctl start puppetdb
-    sleep 5  # Give PuppetDB time to initialize
+    if ! wait_for_port "127.0.0.1" 8081 90; then
+        log_fatal "PuppetDB did not open port 8081 within 90s"
+    fi
 
     log_info "PuppetDB installed successfully"
 }

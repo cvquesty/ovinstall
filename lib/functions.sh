@@ -21,6 +21,11 @@ OS_CODENAME=""        # Debian/Ubuntu codename (e.g., "jammy", "bullseye")
 ARCH=""               # System architecture (e.g., x86_64, aarch64)
 PACKAGE_MANAGER=""    # Package manager command: yum, apt
 
+# Vox Pupuli package repository bases (release series 8)
+VOX_YUM_BASE="https://yum.voxpupuli.org"
+VOX_APT_BASE="https://apt.voxpupuli.org"
+OPENVOX_RELEASE_SERIES="8"
+
 # =============================================================================
 # SECTION: Configuration File Parsing
 # =============================================================================
@@ -397,29 +402,34 @@ setup_yum_repo() {
     # RHEL 10 and Fedora 42+ currently use the EL-9 release package
     case "$OS_MAJOR" in
         8|9)
-            repo_rpm="openvox8-release-el-${OS_MAJOR}.noarch.rpm"
+            repo_rpm="openvox${OPENVOX_RELEASE_SERIES}-release-el-${OS_MAJOR}.noarch.rpm"
             ;;
         10)
             # RHEL 10 — use EL-9 package until a dedicated one is available
-            repo_rpm="openvox8-release-el-9.noarch.rpm"
+            repo_rpm="openvox${OPENVOX_RELEASE_SERIES}-release-el-9.noarch.rpm"
             ;;
         *)
             if [[ "$OS_MAJOR" -ge 42 ]]; then
                 # Fedora 42+ — use EL-9 package
-                repo_rpm="openvox8-release-el-9.noarch.rpm"
+                repo_rpm="openvox${OPENVOX_RELEASE_SERIES}-release-el-9.noarch.rpm"
             else
                 log_fatal "Unsupported RHEL-family version: $OS_VERSION"
             fi
             ;;
     esac
 
-    if is_package_installed "openvox8-release"; then
+    if is_package_installed "openvox${OPENVOX_RELEASE_SERIES}-release"; then
         log_debug "Repository already configured"
         return 0
     fi
 
-    local repo_url="https://yum.voxpupuli.org/$repo_rpm"
+    local repo_url="${VOX_YUM_BASE}/$repo_rpm"
     log_info "Installing repository package: $repo_url"
+
+    # Fail fast on stale/missing release packages (e.g. EL-10/Fedora el-9 fallback)
+    if ! curl -fI -sS --connect-timeout 5 --max-time 15 "$repo_url" >/dev/null; then
+        log_fatal "Release package URL not reachable (HTTP error/404): $repo_url"
+    fi
 
     local tmp_dir="/tmp/openvox-repo"
     mkdir -p "$tmp_dir"
@@ -430,7 +440,7 @@ setup_yum_repo() {
         log_fatal "Failed to download repository package: $repo_url"
     fi
 
-    rpm --import https://yum.voxpupuli.org/RPM-GPG-KEY-VoxPupuli
+    rpm --import "${VOX_YUM_BASE}/RPM-GPG-KEY-VoxPupuli"
     yum clean metadata
 
     rm -rf "$tmp_dir"
@@ -440,15 +450,24 @@ setup_yum_repo() {
 # Setup APT repository for Debian/Ubuntu systems
 # Uses the modern signed-by keyring approach (apt-key is deprecated)
 setup_apt_repo() {
-    local repo_deb="openvox8-release-${OS_CODENAME}.deb"
+    if [[ -z "${OS_CODENAME:-}" ]]; then
+        log_fatal "Empty OS_CODENAME; cannot resolve apt release package for $OS_FAMILY $OS_VERSION"
+    fi
 
-    if is_package_installed "openvox8-release"; then
+    local repo_deb="openvox${OPENVOX_RELEASE_SERIES}-release-${OS_CODENAME}.deb"
+
+    if is_package_installed "openvox${OPENVOX_RELEASE_SERIES}-release"; then
         log_debug "Repository already configured"
         return 0
     fi
 
-    local repo_url="https://apt.voxpupuli.org/$repo_deb"
+    local repo_url="${VOX_APT_BASE}/$repo_deb"
     log_info "Installing repository package: $repo_url"
+
+    # Fail fast when codename debs are missing (404)
+    if ! curl -fI -sS --connect-timeout 5 --max-time 15 "$repo_url" >/dev/null; then
+        log_fatal "Release package URL not reachable (HTTP error/404): $repo_url"
+    fi
 
     local tmp_dir="/tmp/openvox-repo"
     mkdir -p "$tmp_dir"
@@ -462,7 +481,7 @@ setup_apt_repo() {
     # Import GPG key using modern keyring (apt-key is deprecated)
     local keyring_dir="/usr/share/keyrings"
     mkdir -p "$keyring_dir"
-    curl -fsSL https://apt.voxpupuli.org/GPG-KEY \
+    curl -fsSL "${VOX_APT_BASE}/GPG-KEY" \
         | gpg --dearmor -o "${keyring_dir}/voxpupuli-archive-keyring.gpg" 2>/dev/null
 
     apt-get update -qq
@@ -521,6 +540,33 @@ configure_selinux() {
             log_info "Run: semanage fcontext -a -t puppet_var_t '/var/log/openvox(/.*)?'"
         fi
     fi
+}
+
+# =============================================================================
+# SECTION: Port readiness polling
+# =============================================================================
+# Wait until TCP port accepts connections (bash /dev/tcp), or time out.
+
+wait_for_port() {
+    local host="$1"
+    local port="$2"
+    local timeout_sec="${3:-60}"
+    local start now elapsed
+
+    start=$(date +%s)
+    while true; do
+        if timeout 1 bash -c "echo >/dev/tcp/${host}/${port}" 2>/dev/null; then
+            log_info "Port ${host}:${port} is open"
+            return 0
+        fi
+        now=$(date +%s)
+        elapsed=$((now - start))
+        if [[ "$elapsed" -ge "$timeout_sec" ]]; then
+            log_error "Timed out after ${timeout_sec}s waiting for ${host}:${port}"
+            return 1
+        fi
+        sleep 2
+    done
 }
 
 # =============================================================================
