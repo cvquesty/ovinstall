@@ -261,7 +261,31 @@ check_os() {
     esac
 
     if [[ "$supported" != "true" ]]; then
-        log_warn "OS version $OS_FAMILY $OS_VERSION is not officially supported. Continuing anyway..."
+        if [[ "${FORCE:-false}" == "true" ]]; then
+            log_warn "OS version $OS_FAMILY $OS_VERSION is not officially supported; continuing because --force was set"
+        else
+            log_fatal "Unsupported OS: $OS_FAMILY $OS_VERSION. Use --force to override."
+        fi
+    fi
+
+    # ARCH gate: only common 64-bit arches unless --force
+    case "$ARCH" in
+        x86_64|amd64|aarch64|arm64)
+            ;;
+        *)
+            if [[ "${FORCE:-false}" == "true" ]]; then
+                log_warn "Architecture $ARCH is not officially supported; continuing because --force was set"
+            else
+                log_fatal "Unsupported architecture: $ARCH (allowed: x86_64, amd64, aarch64, arm64). Use --force to override."
+            fi
+            ;;
+    esac
+
+    # Debian/Ubuntu need a codename for the release package URL
+    if [[ "$OS_FAMILY" == "debian" || "$OS_FAMILY" == "ubuntu" ]]; then
+        if [[ -z "${OS_CODENAME:-}" ]]; then
+            log_fatal "Empty OS_CODENAME for $OS_FAMILY $OS_VERSION; cannot configure apt repository"
+        fi
     fi
 }
 
@@ -292,16 +316,26 @@ check_disk_space() {
 check_network() {
     log_debug "Checking network connectivity..."
 
-    local test_hosts=(
-        "yum.voxpupuli.org"
-        "apt.voxpupuli.org"
-        "github.com"
-    )
+    local required_host=""
+    case "$OS_FAMILY" in
+        rhel)
+            required_host="yum.voxpupuli.org"
+            ;;
+        debian|ubuntu)
+            required_host="apt.voxpupuli.org"
+            ;;
+    esac
 
-    for host in "${test_hosts[@]}"; do
-        if ! timeout 5 bash -c "echo >/dev/tcp/$host/443" 2>/dev/null; then
-            log_warn "Cannot reach $host on port 443"
+    local host
+    for host in yum.voxpupuli.org apt.voxpupuli.org github.com; do
+        if timeout 5 bash -c "echo >/dev/tcp/$host/443" 2>/dev/null; then
+            log_debug "Reachable: $host:443"
+            continue
         fi
+        if [[ -n "$required_host" && "$host" == "$required_host" ]]; then
+            log_fatal "Cannot reach required package repository host $host on port 443"
+        fi
+        log_warn "Cannot reach $host on port 443"
     done
 
     log_info "Network connectivity check complete"
@@ -543,36 +577,95 @@ configure_services() {
 verify_services() {
     log_info "Verifying services..."
 
+    local failures=0
     local services=()
 
+    # Only real systemd units — gui.sh does not create an openvox-gui unit
     [[ "$INSTALL_SERVER" == "true" ]] && services+=("puppetserver" "puppetdb")
-    [[ "$INSTALL_GUI" == "true" ]]    && services+=("openvox-gui")
 
+    local svc
     for svc in "${services[@]}"; do
         if systemctl is-active --quiet "$svc" 2>/dev/null; then
             log_info "Service $svc is running"
         else
-            log_warn "Service $svc is not running (may need to be started)"
+            log_error "Required service $svc is not running"
+            failures=$((failures + 1))
         fi
     done
+
+    # GUI: process/HTTP check on gui_port (default 4567), not a fake unit
+    if [[ "$INSTALL_GUI" == "true" ]]; then
+        local port="${gui_port:-4567}"
+        if curl --fail -sS -o /dev/null --connect-timeout 3 --max-time 5 \
+            "http://127.0.0.1:${port}/" 2>/dev/null; then
+            log_info "OpenVox-GUI HTTP check passed on port ${port}"
+        else
+            log_error "OpenVox-GUI is not responding on port ${port}"
+            failures=$((failures + 1))
+        fi
+    fi
+
+    # Agent-only: package + puppet binary present
+    if [[ "$INSTALL_AGENT" == "true" && "$INSTALL_SERVER" != "true" ]]; then
+        if ! is_package_installed "openvox-agent"; then
+            log_error "openvox-agent package is not installed"
+            failures=$((failures + 1))
+        fi
+        if [[ ! -x /opt/puppetlabs/bin/puppet ]]; then
+            log_error "puppet binary not found at /opt/puppetlabs/bin/puppet"
+            failures=$((failures + 1))
+        else
+            log_info "openvox-agent package and puppet binary present"
+        fi
+    fi
+
+    if [[ "$failures" -gt 0 ]]; then
+        log_error "Service verification failed ($failures check(s))"
+        return 1
+    fi
+
+    log_info "Service verification passed"
+    return 0
+}
+
+# Probe a URL with curl --fail; retry with backoff. Returns 1 on exhaustion.
+_probe_http_fail() {
+    local url="$1"
+    local label="$2"
+    local attempts="${3:-10}"
+    local sleep_sec="${4:-3}"
+    local i
+
+    for ((i = 1; i <= attempts; i++)); do
+        if curl --fail -sk -o /dev/null --connect-timeout 3 --max-time 10 "$url" 2>/dev/null; then
+            log_info "$label is reachable"
+            return 0
+        fi
+        log_debug "$label probe attempt $i/$attempts failed"
+        if [[ "$i" -lt "$attempts" ]]; then
+            sleep "$sleep_sec"
+        fi
+    done
+
+    log_error "$label did not become reachable after ${attempts} attempts"
+    return 1
 }
 
 verify_connectivity() {
     log_info "Verifying connectivity..."
 
-    # Test PuppetServer
-    if [[ "$INSTALL_SERVER" == "true" ]]; then
-        if curl -sk https://localhost:8140/puppet/v3/ 2>/dev/null; then
-            log_info "PuppetServer is reachable"
-        else
-            log_warn "PuppetServer is not yet responding (normal on first startup)"
-        fi
-
-        # Test PuppetDB
-        if curl -sk https://localhost:8081/pdb/query/v4/version 2>/dev/null; then
-            log_info "PuppetDB is reachable"
-        else
-            log_warn "PuppetDB is not yet responding (normal on first startup)"
-        fi
+    if [[ "$INSTALL_SERVER" != "true" ]]; then
+        return 0
     fi
+
+    # Prefer endpoints that return a real status; --fail rejects HTTP error codes
+    if ! _probe_http_fail "https://localhost:8140/status/v1/simple" "PuppetServer (8140)"; then
+        return 1
+    fi
+
+    if ! _probe_http_fail "https://localhost:8081/status/v1/simple" "PuppetDB (8081)"; then
+        return 1
+    fi
+
+    return 0
 }
