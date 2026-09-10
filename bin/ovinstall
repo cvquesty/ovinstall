@@ -64,7 +64,7 @@ INSTALL_OPENBOLT=false     # OpenBolt — agentless orchestration
 
 # Behavior flags
 DRY_RUN=false              # Show what would be installed without executing
-FORCE=false                # Reinstall even if already installed
+FORCE=false                # Override OS/arch gate; continue on finalize agent failure
 SKIP_PREFLIGHT=false       # Skip preflight checks
 NONINTERACTIVE=false       # Don't prompt for user input
 VERBOSE=false              # Verbose output (enables bash debug mode)
@@ -107,7 +107,8 @@ OPTIONS:
     --openbolt              Install OpenBolt (agentless orchestration)
     --non-interactive       Run without prompting (for scripted installs)
     -d, --dry-run           Show what would be done without executing
-    -f, --force             Force installation even if already installed
+    -f, --force             Override unsupported OS/arch gate; also continue
+                            finalize if puppet agent exits with a non-success code
     -s, --skip-preflight    Skip preflight checks
     -v, --verbose           Verbose output
     -h, --help              Show this help message
@@ -475,23 +476,40 @@ phase_verify() {
 # Phase 5: Final agent run
 phase_finalize() {
     log_info "Phase 5: Finalizing installation..."
-    
+
     # Run puppet agent -t to complete configuration
     if [[ "${run_final_agent:-true}" != "false" ]]; then
         log_info "Running puppet agent -t to complete configuration..."
-        
+
         if [[ "$DRY_RUN" != "true" ]]; then
-            # Run agent, allow failures (may need cert signing)
-            /opt/puppetlabs/bin/puppet agent --test --detailed-exitcodes 2>&1 || true
+            # Puppet detailed-exitcodes: 0=ok, 2=changes (success),
+            # 1=failure, 4=failures during run, 6=changes+failures.
+            # Treat only 0 and 2 as success; do not swallow other codes.
+            local agent_rc=0
+            set +e
+            /opt/puppetlabs/bin/puppet agent --test --detailed-exitcodes 2>&1
+            agent_rc=$?
+            set -e
+            case "$agent_rc" in
+                0|2)
+                    log_info "Initial agent run complete (exit $agent_rc)"
+                    ;;
+                *)
+                    if [[ "${FORCE:-false}" == "true" ]]; then
+                        log_warn "puppet agent exited $agent_rc; continuing because --force was set"
+                    else
+                        log_error "puppet agent failed with exit code $agent_rc"
+                        return 1
+                    fi
+                    ;;
+            esac
         else
             log_info "Dry-run: would run puppet agent --test"
         fi
-        
-        log_info "Initial agent run complete"
     else
         log_info "Skipping final agent run (run_final_agent=false)"
     fi
-    
+
     log_info "OpenVox installation complete!"
     log_info "Run 'puppet agent -t' to apply configuration"
 }
