@@ -64,6 +64,7 @@ INSTALL_OPENBOLT=false     # OpenBolt — agentless orchestration
 
 # Behavior flags
 DRY_RUN=false              # Show what would be installed without executing
+FORCE=false                # Override unsupported OS/arch gate; continue on finalize agent failure
 SKIP_PREFLIGHT=false       # Skip preflight checks
 NONINTERACTIVE=false       # Don't prompt for user input
 VERBOSE=false              # Verbose output (debug logging only; no bash set -x)
@@ -106,6 +107,7 @@ OPTIONS:
     --openbolt              Install OpenBolt (agentless orchestration)
     --non-interactive       Run without prompting (for scripted installs)
     -d, --dry-run           Show what would be done without executing
+    -f, --force             Override unsupported OS/arch gate; also continue on finalize agent failure
     -s, --skip-preflight    Skip preflight checks
     -v, --verbose           Enable debug logging (does not enable bash set -x)
     -h, --help              Show this help message
@@ -209,8 +211,8 @@ parse_args() {
                 ;;
 
             -f|--force)
-                # Deprecated / unread: accept for compatibility but do nothing
-                log_warn "--force is deprecated and currently has no effect; ignoring"
+                # Explicit insecure/override opt-in — OS/arch gate + finalize continue (systems PR)
+                FORCE=true
                 shift
                 ;;
 
