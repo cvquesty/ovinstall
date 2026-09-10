@@ -70,7 +70,7 @@ Keys actually read by `load_config` are listed in the README Configuration secti
 | Server (agent + Puppet Server + PuppetDB + r10k) | `sudo ./bin/ovinstall --server` |
 | Everything including OpenBolt + GUI | `sudo ./bin/ovinstall --mode complete --non-interactive` |
 
-`--agent` implies `--non-interactive`. You can also combine component flags such as `--gui` or `--openbolt` with an explicit selection.
+`--agent` does not imply `--non-interactive` (pass it explicitly). You can also combine component flags such as `--gui` or `--openbolt` with an explicit selection.
 
 ## 6. Verbose logging and log file
 

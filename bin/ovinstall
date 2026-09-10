@@ -64,7 +64,6 @@ INSTALL_OPENBOLT=false     # OpenBolt — agentless orchestration
 
 # Behavior flags
 DRY_RUN=false              # Show what would be installed without executing
-FORCE=false                # Reinstall even if already installed
 SKIP_PREFLIGHT=false       # Skip preflight checks
 NONINTERACTIVE=false       # Don't prompt for user input
 VERBOSE=false              # Verbose output (enables bash debug mode)
@@ -95,22 +94,29 @@ ovinstall - Automated OpenVox Stack Installation
 
 Usage: $0 [OPTIONS]
 
-OPTIONS:
+--mode picks a preset. Component flags (--agent, --server, --gui, --openbolt)
+override which pieces install. None of those flags imply --non-interactive;
+pass --non-interactive explicitly for scripted runs.
+
+COMMON:
     -c, --config FILE       Configuration file (default: /etc/openvox/openvox.conf)
-    -m, --mode MODE         Installation mode: agent|server|complete
+    -m, --mode MODE         Preset: agent|server|complete
                             - agent:    OpenVox Agent only
                             - server:   Agent + Puppet Server + PuppetDB + r10k
                             - complete: All components including OpenBolt + GUI
-    --agent                 Install only the OpenVox Agent (implies --non-interactive)
+    --non-interactive       Run without prompting (required for scripted installs)
+    -d, --dry-run           Show what would be done without executing
+    -h, --help              Show this help message
+
+COMPONENTS:
+    --agent                 Install only the OpenVox Agent
     --server                Install OpenVox Server (agent + PuppetDB + r10k)
     --gui                   Install OpenVox-GUI
     --openbolt              Install OpenBolt (agentless orchestration)
-    --non-interactive       Run without prompting (for scripted installs)
-    -d, --dry-run           Show what would be done without executing
-    -f, --force             Force installation even if already installed
+
+ADVANCED:
     -s, --skip-preflight    Skip preflight checks
-    -v, --verbose           Verbose output
-    -h, --help              Show this help message
+    -v, --verbose           Verbose output (sets LOG_LEVEL=debug and enables bash set -x)
 
 EXAMPLES:
     # Interactive installation (prompts for required values):
@@ -119,8 +125,8 @@ EXAMPLES:
     # Non-interactive with all defaults:
     sudo $0 --mode complete --non-interactive
 
-    # Agent only:
-    sudo $0 --agent
+    # Agent only (add --non-interactive for scripted use):
+    sudo $0 --agent --non-interactive
 
     # Server with r10k (requires r10k_remote in config or prompt):
     sudo $0 --server
@@ -176,7 +182,6 @@ parse_args() {
                 INSTALL_GUI=false
                 INSTALL_OPENBOLT=false
                 EXPLICIT_COMPONENTS=true
-                NONINTERACTIVE=true
                 shift
                 ;;
 
@@ -211,8 +216,8 @@ parse_args() {
                 ;;
 
             -f|--force)
-                FORCE=true
-                shift
+                log_error "--force was removed (it had no effect). Re-run without -f/--force."
+                usage 1
                 ;;
 
             -s|--skip-preflight)
@@ -221,6 +226,7 @@ parse_args() {
                 ;;
 
             -v|--verbose)
+                # Enables curated debug logs AND bash set -x (full shell trace).
                 VERBOSE=true
                 LOG_LEVEL="debug"
                 set -x
@@ -355,17 +361,49 @@ EOF
 }
 
 # =============================================================================
+# SECTION: Component checklist / confirm
+# =============================================================================
+
+list_planned_components() {
+    [[ "$INSTALL_AGENT"    == "true" ]] && echo "  - OpenVox Agent"
+    [[ "$INSTALL_SERVER"   == "true" ]] && echo "  - OpenVox Server (Puppet Server + PuppetDB)"
+    [[ "$INSTALL_R10K"     == "true" ]] && echo "  - r10k (Puppet code deployment)"
+    [[ "$INSTALL_OPENBOLT" == "true" ]] && echo "  - OpenBolt (agentless orchestration)"
+    [[ "$INSTALL_GUI"      == "true" ]] && echo "  - OpenVox-GUI"
+}
+
+confirm_install() {
+    echo ""
+    echo "Will install:"
+    list_planned_components
+    [[ -n "$server_hostname" ]] && echo "  Server hostname: $server_hostname"
+    [[ -n "$r10k_remote" ]]     && echo "  Control repo:    $r10k_remote"
+    echo ""
+
+    if [[ "$NONINTERACTIVE" == "true" || "$DRY_RUN" == "true" ]]; then
+        return 0
+    fi
+
+    local reply
+    read -rp "Continue with installation? [y/N]: " reply
+    case "${reply:-}" in
+        y|Y|yes|YES) return 0 ;;
+        *)
+            log_info "Installation cancelled."
+            exit 0
+            ;;
+    esac
+}
+
+# =============================================================================
 # SECTION: Dry Run Output
 # =============================================================================
 
 dry_run() {
-    log_info "Components to be installed:"
-
-    [[ "$INSTALL_AGENT"    == "true" ]] && log_info "  - OpenVox Agent"
-    [[ "$INSTALL_SERVER"   == "true" ]] && log_info "  - OpenVox Server (Puppet Server + PuppetDB)"
-    [[ "$INSTALL_R10K"     == "true" ]] && log_info "  - r10k (Puppet code deployment)"
-    [[ "$INSTALL_OPENBOLT" == "true" ]] && log_info "  - OpenBolt (agentless orchestration)"
-    [[ "$INSTALL_GUI"      == "true" ]] && log_info "  - OpenVox-GUI"
+    log_info "Components that would be installed:"
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && log_info "$line"
+    done < <(list_planned_components)
 
     [[ -n "$server_hostname" ]] && log_info "  Server hostname: $server_hostname"
     [[ -n "$r10k_remote" ]]     && log_info "  Control repo:    $r10k_remote"
@@ -378,6 +416,8 @@ dry_run() {
 # =============================================================================
 
 print_summary() {
+    local step=1
+
     cat << EOF
 
     ========================================
@@ -387,12 +427,28 @@ print_summary() {
     OpenVox installation completed successfully!
 
     Next steps:
-    1. Review /var/log/openvox/install.log for details
-    2. Configure your Puppetfile for r10k
-    3. Run initial Puppet agent run:
-       puppet agent -t
-
 EOF
+
+    echo "    ${step}. Review /var/log/openvox/install.log for details"
+    step=$((step + 1))
+
+    if [[ "$INSTALL_R10K" == "true" ]]; then
+        echo "    ${step}. Configure your Puppetfile for r10k (if not already managed in the control repo)"
+        step=$((step + 1))
+    fi
+
+    if [[ "$INSTALL_AGENT" == "true" ]]; then
+        echo "    ${step}. Run an initial Puppet agent run:"
+        echo "       /opt/puppetlabs/bin/puppet agent -t"
+        step=$((step + 1))
+    fi
+
+    if [[ "$INSTALL_SERVER" == "true" && -f /etc/openvox/puppetdb_password ]]; then
+        echo "    ${step}. PuppetDB DB password file (mode 0600): /etc/openvox/puppetdb_password"
+        step=$((step + 1))
+    fi
+
+    echo ""
 
     if [[ "$INSTALL_SERVER" == "true" ]]; then
         cat << EOF
@@ -411,6 +467,18 @@ EOF
 
 EOF
     fi
+}
+
+print_dry_run_summary() {
+    cat << EOF
+
+    ========================================
+    Dry Run Summary
+    ========================================
+
+    Dry run finished. No changes made.
+
+EOF
 }
 
 # =============================================================================
@@ -487,13 +555,10 @@ phase_finalize() {
             log_info "Dry-run: would run puppet agent --test"
         fi
         
-        log_info "Initial agent run complete"
+        log_info "Initial agent run finished (cert signing may still be required)"
     else
         log_info "Skipping final agent run (run_final_agent=false)"
     fi
-    
-    log_info "OpenVox installation complete!"
-    log_info "Run 'puppet agent -t' to apply configuration"
 }
 
 # =============================================================================
@@ -533,23 +598,25 @@ main() {
     # Step 9: Interactive prompts (skipped if --non-interactive)
     prompt_for_config
 
-    # Step 10: Handle dry-run mode
+    # Step 10: Show planned components; confirm before mutating (interactive)
+    confirm_install
+
+    # Step 11: Handle dry-run mode
     if [[ "$DRY_RUN" == "true" ]]; then
         log_warn "DRY RUN MODE — No changes will be made"
         dry_run
-        print_summary
+        print_dry_run_summary
         exit 0
     fi
 
-    # Step 11: Execute installation phases
+    # Step 12: Execute installation phases
     phase_setup_repo
     phase_install_components
     phase_post_install
     phase_verify
     phase_finalize
 
-    # Step 12: Done
-    log_info "Installation complete!"
+    # Step 13: Done (single completion path — print_summary owns the banner)
     print_summary
 }
 

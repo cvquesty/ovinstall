@@ -110,15 +110,14 @@ For a step-by-step walkthrough, see [docs/USAGE.md](docs/USAGE.md).
 |--------|-------------|
 | `-c, --config FILE` | Path to configuration file (default: `/etc/openvox/openvox.conf`) |
 | `-m, --mode MODE` | Installation mode: `agent`, `server`, `complete` |
-| `--agent` | Install agent only (implies `--non-interactive`) |
+| `--agent` | Install agent only |
 | `--server` | Install server (agent + PuppetDB + r10k) |
 | `--gui` | Install OpenVox-GUI |
 | `--openbolt` | Install OpenBolt |
 | `--non-interactive` | Run without prompting |
 | `-d, --dry-run` | Show what would be done |
-| `-f, --force` | Force installation even if already installed |
 | `-s, --skip-preflight` | Skip preflight checks |
-| `-v, --verbose` | Verbose output |
+| `-v, --verbose` | Verbose output (debug logs + bash `set -x`) |
 | `-h, --help` | Show help message |
 
 ## Configuration
