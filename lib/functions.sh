@@ -357,7 +357,7 @@ check_disk_space() {
     available_mb=$(df -m / | awk 'NR==2 {print $4}')
 
     if [[ "$available_mb" -lt "$required_mb" ]]; then
-        log_error "Insufficient disk space. Required: ${required_mb}MB, Available: ${available_mb}MB"
+        log_error "Insufficient disk space. Required: ${required_mb}MB, Available: ${available_mb}MB. Free space on / (or install to a volume with more room) and re-run."
         return 1
     fi
 
@@ -391,7 +391,7 @@ check_network() {
         if [[ -n "$required_host" && "$host" == "$required_host" ]]; then
             log_fatal "Cannot reach required package repository host $host on port 443"
         fi
-        log_warn "Cannot reach $host on port 443"
+        log_warn "Cannot reach $host on port 443 — install continues for non-required hosts; check DNS/proxy/outbound HTTPS if downloads fail."
     done
 
     log_info "Network connectivity check complete"
