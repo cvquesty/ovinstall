@@ -523,8 +523,9 @@ phase_post_install() {
     # SEC-008: r10k-only owns /etc/puppetlabs/code/environments — do not also
     # clone via deploy_control_repo into that basedir.
     if [[ "$INSTALL_R10K" == "true" ]]; then
+        # Single r10k deploy (-p already applies Puppetfiles); do not also call
+        # deploy_puppetfile_per_environment (was a no-op loop + duplicate deploy).
         deploy_environments
-        deploy_puppetfile_per_environment
     fi
 }
 

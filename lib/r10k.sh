@@ -162,41 +162,12 @@ deploy_environments() {
 }
 
 # =============================================================================
-# SECTION: Deploy Puppetfile Modules Per Environment
+# SECTION: Deploy Puppetfile Modules Per Environment (deprecated)
 # =============================================================================
-# Reads Puppetfile from each environment and deploys modules to $moduledir.
-# This ensures each environment has its own module set from its Puppetfile.
+# Historically duplicated `r10k deploy environment -p`. Kept as a thin wrapper
+# for any external callers; phase_post_install now calls deploy_environments only.
 
 deploy_puppetfile_per_environment() {
-    log_info "Deploying Puppetfile modules per environment..."
-    
-    local environments_dir="/etc/puppetlabs/code/environments"
-    local r10k_cmd=""
-    
-    if [[ -x /opt/puppetlabs/puppet/bin/r10k ]]; then
-        r10k_cmd="/opt/puppetlabs/puppet/bin/r10k"
-    elif command -v r10k &>/dev/null; then
-        r10k_cmd="r10k"
-    else
-        log_warn "r10k not found"
-        return 1
-    fi
-    
-    # Get list of environments
-    for env_dir in "$environments_dir"/*/; do
-        if [[ -d "$env_dir" && -f "${env_dir}Puppetfile" ]]; then
-            local env_name=$(basename "$env_dir")
-            log_info "Deploying modules for environment: $env_name"
-            
-            # r10k deploy will handle this via the Puppetfile in each environment
-            # The environment deploy already handles Puppetfile per environment
-        fi
-    done
-    
-    # Full deployment with Puppetfile
-    if [[ "$DRY_RUN" != "true" ]]; then
-        $r10k_cmd deploy environment -p
-    fi
-    
-    log_info "Puppetfile deployment complete"
+    log_warn "deploy_puppetfile_per_environment is deprecated; use deploy_environments (r10k deploy environment -p already applies Puppetfiles)"
+    deploy_environments
 }
