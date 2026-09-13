@@ -19,6 +19,11 @@
 # =============================================================================
 
 deploy_control_repo() {
+    # SEC-008: deprecated — r10k owns /etc/puppetlabs/code/environments.
+    # Kept for compatibility; callers should use deploy_environments instead.
+    log_warn "deploy_control_repo is deprecated (SEC-008): r10k-only owns environments; skipping dual-path clone"
+    return 0
+
     log_info "=========================================="
     log_info "Deploying Control Repository"
     log_info "=========================================="

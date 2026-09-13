@@ -35,12 +35,26 @@ _validate_puppetdb_password() {
     return 0
 }
 
-# Resolve puppetdb_password: generate when empty/changeme; validate operator-supplied
+# Resolve puppetdb_password: reuse persisted secret when valid; else generate;
+# validate operator-supplied values.
 ensure_puppetdb_password() {
+    local persist_dir="/etc/openvox"
+    local persist_file="${persist_dir}/puppetdb_password"
+
     if [[ -z "${puppetdb_password:-}" || "$puppetdb_password" == "changeme" ]]; then
+        # Prefer an existing persisted password over minting a new one (reinstall/idempotent)
+        if [[ -f "$persist_file" ]]; then
+            local existing
+            existing="$(tr -d '\r\n' < "$persist_file" || true)"
+            if _validate_puppetdb_password "$existing"; then
+                puppetdb_password="$existing"
+                log_info "Reusing PuppetDB database password from ${persist_file} (not logged)."
+                return 0
+            fi
+            log_warn "Existing ${persist_file} failed validation; generating a new password."
+        fi
+
         puppetdb_password="$(_generate_puppetdb_password)"
-        local persist_dir="/etc/openvox"
-        local persist_file="${persist_dir}/puppetdb_password"
         mkdir -p "$persist_dir"
         umask 077
         printf '%s\n' "$puppetdb_password" > "$persist_file"
