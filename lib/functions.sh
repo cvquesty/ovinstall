@@ -740,6 +740,25 @@ verify_services() {
         fi
     done
 
+    # PuppetDB terminus wiring (written by configure_puppetdb_terminus)
+    if [[ "$INSTALL_SERVER" == "true" ]]; then
+        local confdir="/etc/puppetlabs/puppet"
+        local routes="${confdir}/routes.yaml"
+        local pdb_conf="${confdir}/puppetdb.conf"
+        if [[ -f "$routes" ]]; then
+            log_info "PuppetDB terminus routes present: $routes"
+        else
+            log_error "Missing PuppetDB terminus routes: $routes"
+            failures=$((failures + 1))
+        fi
+        if [[ -f "$pdb_conf" ]]; then
+            log_info "PuppetDB client config present: $pdb_conf"
+        else
+            log_error "Missing PuppetDB client config: $pdb_conf"
+            failures=$((failures + 1))
+        fi
+    fi
+
     # GUI: process/HTTP check on gui_port (default 4567), not a fake unit
     if [[ "$INSTALL_GUI" == "true" ]]; then
         local port="${gui_port:-4567}"
