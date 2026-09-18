@@ -52,8 +52,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: bash -n in container
+        shell: bash
         run: |
           set -euo pipefail
           for f in bin/* lib/*.sh; do
+            echo "bash -n $f"
             bash -n "$f"
           done
