@@ -208,7 +208,8 @@ do_health_check() {
     
     # Check disk space
     echo -n "Disk space:    "
-    local disk_used=$(df /etc/puppetlabs 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
+    local disk_used
+    disk_used=$(df /etc/puppetlabs 2>/dev/null | tail -1 | awk '{print $5}' | tr -d '%')
     if [[ -n "$disk_used" ]] && [[ "$disk_used" -lt 80 ]]; then
         log_success "${disk_used}% used"
     elif [[ -n "$disk_used" ]] && [[ "$disk_used" -lt 90 ]]; then
@@ -221,7 +222,8 @@ do_health_check() {
     # Check CA status
     echo -n "CA Status:     "
     if [[ -f /etc/puppetlabs/puppet/ssl/ca/ca_crt.pem ]]; then
-        local days=$(/opt/puppetlabs/puppet/bin/openssl x509 -in /etc/puppetlabs/puppet/ssl/ca/ca_crt.pem -noout -enddate 2>/dev/null | cut -d= -f2)
+        local days
+        days=$(/opt/puppetlabs/puppet/bin/openssl x509 -in /etc/puppetlabs/puppet/ssl/ca/ca_crt.pem -noout -enddate 2>/dev/null | cut -d= -f2)
         if [[ -n "$days" ]]; then
             log_success "valid (expires: $days)"
         else
@@ -469,11 +471,12 @@ do_tune() {
     
     # Source hardware detection if available
     if [[ -f "$PROJECT_ROOT/lib/functions.sh" ]]; then
+        # shellcheck source=lib/functions.sh
         source "$PROJECT_ROOT/lib/functions.sh"
     fi
     
     case "$component" in
-        puppetserver|all)
+        puppetserver)
             log_info "Tuning Puppet Server JVM..."
             
             # Detect available memory
@@ -536,7 +539,8 @@ do_status() {
     if [[ -d /etc/puppetlabs/code/environments ]]; then
         for env in /etc/puppetlabs/code/environments/*/; do
             if [[ -d "$env" ]]; then
-                local count=$(find "$env/modules" -maxdepth 1 -type d 2>/dev/null | wc -l)
+                local count
+                count=$(find "$env/modules" -maxdepth 1 -type d 2>/dev/null | wc -l)
                 echo "  $(basename $env): ${count} modules"
             fi
         done
@@ -546,7 +550,8 @@ do_status() {
     # Certificates
     echo "Certificates:"
     if [[ -x /opt/puppetlabs/bin/puppetserver ]]; then
-        local signed=$(/opt/puppetlabs/bin/puppetserver ca list --all 2>/dev/null | grep -c "^\+" || echo "0")
+        local signed
+        signed=$(/opt/puppetlabs/bin/puppetserver ca list --all 2>/dev/null | grep -c "^\+" || echo "0")
         echo "  Signed: $signed"
     fi
 }

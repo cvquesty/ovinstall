@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  shell:
+    name: bash -n + shellcheck + --help
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Syntax check (bash -n)
+        run: |
+          set -euo pipefail
+          for f in bin/* lib/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+
+      - name: ShellCheck entrypoints (follow sources)
+        run: |
+          set -euo pipefail
+          # -x follows source so cross-file globals are not false SC2034
+          shellcheck -S warning -x bin/ovinstall bin/ovinstall-maintenance
+
+      - name: ovinstall --help (no root required)
+        run: ./bin/ovinstall --help
+
+  # Lightweight platform smoke: syntax + help inside common OS containers.
+  # Full package installs need privileged VMs — not in this job.
+  platform-syntax:
+    name: platform bash -n (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - rockylinux:9
+          - debian:12
+          - ubuntu:24.04
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: bash -n in container
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in bin/* lib/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
