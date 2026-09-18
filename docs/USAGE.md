@@ -1,6 +1,10 @@
-# ovinstall usage tutorial
+# ovinstall usage
 
-Step-by-step guide for the bash installer in this repository (`v0.3.0`). Commands below match `bin/ovinstall` and `bin/ovinstall-maintenance` only.
+Step-by-step guide for the bash installer in this repository (**v0.3.0**).
+
+Commands below match `bin/ovinstall` and `bin/ovinstall-maintenance` only — no invented flags.
+
+Badges, requirements, and component tables live in the [root README](../README.md).
 
 ## Prerequisites
 

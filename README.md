@@ -1,41 +1,74 @@
+<div align="center">
+
 # ovinstall
 
-Automated bash-based installer for the complete OpenVox stack (Puppet + components).
+**Automated bash installer for the complete OpenVox stack — agent, server, PuppetDB, r10k, OpenBolt, and OpenVox-GUI — without hand-rolling package repos every time.**
 
-**Current version:** v0.3.0 (installer banner)
+[![Version](https://img.shields.io/badge/version-0.3.0-orange?style=for-the-badge)](https://github.com/cvquesty/ovinstall/releases)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
+[![Bash](https://img.shields.io/badge/bash-4.0%2B-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![OpenVox](https://img.shields.io/badge/OpenVox-8.x%20packages-6f42c1?style=for-the-badge)](https://voxpupuli.org)
+[![CI](https://github.com/cvquesty/ovinstall/actions/workflows/ci.yml/badge.svg?style=for-the-badge)](https://github.com/cvquesty/ovinstall/actions/workflows/ci.yml)
 
-## Overview
+[Quick Start](#quick-start) · [Install modes](#installation-modes) · [Usage](docs/USAGE.md) · [Configuration](#configuration) · [Maintenance](#maintenance-ovinstall-maintenance) · [Technical design](TECHNICAL_DESIGN.md) · [License](LICENSE)
 
-This project provides a fully automated bash installer for deploying OpenVox infrastructure:
+</div>
 
-- **OpenVox Agent** — Puppet agent (`openvox-agent` package)
-- **OpenVox Server** — Puppet Server (`openvox-server` package)
-- **PuppetDB** — PostgreSQL-backed data warehouse for Puppet
-- **r10k** — Git-to-environment deployer (server only)
-- **OpenBolt** — Agentless orchestration tool
-- **OpenVox-GUI** — Web management interface (optional)
+---
+
+## What is ovinstall?
+
+ovinstall is a **pure bash** installer you run on a Linux host (as root). It configures Vox Pupuli yum/apt repositories, installs the OpenVox stack components you select, wires PuppetDB termini, deploys code with r10k, and fail-closes verification so a “successful” install means services and ports actually came up.
 
 Companion tooling: **`bin/ovinstall-maintenance`** for health checks, backup/restore, JVM tuning, and scaling helpers.
 
+You do **not** need Bolt or Puppet already installed to run the installer — only bash, curl, and network access to voxpupuli.org (and GitHub when cloning the GUI / control repo).
+
+### Components it can install
+
+| Component | Package / source | Notes |
+|-----------|------------------|-------|
+| **OpenVox Agent** | `openvox-agent` | Connects to an existing or local server |
+| **OpenVox Server** | `openvox-server` | Puppet Server + PuppetDB terminus wiring |
+| **PuppetDB / OpenVoxDB** | `puppetdb` | Internal PostgreSQL by default |
+| **r10k** | gem via Puppet Ruby | Server-only; owns environments |
+| **OpenBolt** | `openbolt` | Agentless orchestration |
+| **OpenVox-GUI** | git clone + `install.sh` | Optional web UI |
+
+### Software used (operator / runtime)
+
+| Tool | Why | Where to get it |
+|------|-----|-----------------|
+| **bash 4.0+** | Runs `ovinstall` and maintenance | OS package manager |
+| **curl** | Repo packages, health probes | OS package manager |
+| **git** | OpenVox-GUI clone, r10k control repos | [git-scm.com](https://git-scm.com/) |
+| **systemd** | Enable/start services | Part of supported platforms |
+| **Root / sudo** | Package install + service control | Local admin |
+| **Vox Pupuli repos** | OpenVox packages | [yum.voxpupuli.org](https://yum.voxpupuli.org) / [apt.voxpupuli.org](https://apt.voxpupuli.org) |
+
+Optional on the target host after install: OpenJDK for Puppet Server (as required by the OpenVox server package), PostgreSQL when using an external PuppetDB.
+
 ## Requirements
 
-- **Supported Operating Systems:**
-  - RHEL 8, 9, 10
-  - CentOS 8+
-  - Rocky Linux 8+
-  - AlmaLinux 8+
-  - Fedora 42+
-  - Debian 11 (Bullseye), 12 (Bookworm)
-  - Ubuntu 22.04 (Jammy), 24.04 (Noble)
+### Supported operating systems
 
-- **System Requirements:**
-  - Root/sudo access
-  - bash 4.0+
-  - curl
-  - 15 GB free disk space
-  - Internet connectivity (to reach voxpupuli.org, GitHub)
-  - Valid FQDN hostname (for server installations)
-  - git (for OpenVox-GUI and r10k)
+| Family | Versions |
+|--------|----------|
+| **RHEL / CentOS / Rocky / AlmaLinux** | 8, 9, 10 |
+| **Fedora** | 42+ |
+| **Debian** | 11 (Bullseye), 12 (Bookworm) |
+| **Ubuntu** | 22.04 (Jammy), 24.04 (Noble) |
+
+Unsupported OS/arch fails closed unless you pass `--force`.
+
+### System requirements
+
+- Root / sudo access
+- **bash 4.0+**, **curl**
+- **15 GB** free disk on `/` (also plan space under `/opt` and `/var`)
+- Internet access to voxpupuli.org (and GitHub when installing GUI / using git remotes)
+- Valid **FQDN** hostname for server installs
+- **git** when installing OpenVox-GUI or deploying via r10k SSH/HTTPS remotes
 
 ## Quick Start
 
@@ -302,11 +335,11 @@ ovinstall/
 
 3. **Post-Install Configuration** (`phase_post_install`)
    - `configure_firewall` / `configure_selinux` / `configure_services`
-   - If r10k selected: `deploy_environments` + `deploy_puppetfile_per_environment`
-   - If server + `r10k_remote` set: may call `deploy_control_repo` (as-built dual path; **deprecated** — prefer r10k-only environments ownership)
+   - If r10k selected: single `deploy_environments` (`r10k deploy environment -p`)
+   - Environments are **r10k-only**; `deploy_control_repo` into the environments basedir is deprecated and skipped
 
-4. **Verification** (`phase_verify`)
-   - `verify_services` / `verify_connectivity`
+4. **Verification** (`phase_verify`) — fail-closed
+   - `verify_services` / `verify_connectivity` (and PuppetDB `routes.yaml` + `puppetdb.conf` when server)
    - `verify_openbolt` when OpenBolt was installed
 
 5. **Finalize** (`phase_finalize`)
@@ -334,7 +367,7 @@ ovinstall/
 #### r10k (Server Only)
 - Installs r10k Ruby gem via Puppet's bundled gem
 - Creates config at `/etc/puppetlabs/r10k/r10k.yaml`
-- Deploys environments and per-environment Puppetfiles from the control repository
+- Deploys environments (with Puppetfiles) from the control repository via a single `r10k deploy environment -p`
 
 #### Control repository helpers
 - `lib/control_repo.sh` still exists on current tree. **Preferred:** r10k-only ownership of environments. A second clone into the environments basedir is deprecated / non-recommended; staging (if needed) should stay outside r10k’s basedir (e.g. `/var/lib/ovinstall/`).
@@ -351,7 +384,8 @@ ovinstall/
 
 - [Project Plan](PROJECT_PLAN.md) — Specs, roadmap, and implementation annotations
 - [Technical Design](TECHNICAL_DESIGN.md) — Architecture (as-built bash + aspirational design)
-- [Usage Tutorial](docs/USAGE.md) — Concrete commands for install and maintenance
+- [Usage Tutorial](docs/USAGE.md)
+- [Changelog](CHANGELOG.md) — Concrete commands for install and maintenance
 - [Configuration Example](etc/openvox.conf.example) — Annotated conf file (includes reserved keys)
 - [LICENSE](LICENSE) — Apache License 2.0
 
