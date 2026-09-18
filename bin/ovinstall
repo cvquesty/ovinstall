@@ -40,6 +40,7 @@ CONFIG_FILE="/etc/openvox/openvox.conf"
 # Load functions.sh first (provides logging, OS detection, etc.)
 # then load all component installer scripts.
 
+# shellcheck source=lib/functions.sh
 source "${LIB_DIR}/functions.sh"
 
 for lib in "${LIB_DIR}"/*.sh; do
@@ -67,9 +68,7 @@ DRY_RUN=false              # Show what would be installed without executing
 FORCE=false                # Override unsupported OS/arch gate; continue on finalize agent failure
 SKIP_PREFLIGHT=false       # Skip preflight checks
 NONINTERACTIVE=false       # Don't prompt for user input
-VERBOSE=false              # Verbose output (debug logging only; no bash set -x)
-
-# Logging
+# Logging (--verbose sets LOG_LEVEL=debug; never enables bash set -x)
 LOG_LEVEL="info"           # debug, info, warning, error
 
 # Installation mode (used with --mode flag)
@@ -231,7 +230,6 @@ parse_args() {
 
             -v|--verbose)
                 # SEC-010: debug logging only — never global set -x (avoids secret leakage)
-                VERBOSE=true
                 LOG_LEVEL="debug"
                 shift
                 ;;

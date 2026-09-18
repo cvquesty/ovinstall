@@ -25,11 +25,35 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
 
-      - name: ShellCheck
+      - name: ShellCheck entrypoints (follow sources)
         run: |
           set -euo pipefail
-          # Severity warning: surface style issues without blocking forever on pedantic info
-          shellcheck -S warning bin/* lib/*.sh
+          # -x follows source so cross-file globals are not false SC2034
+          shellcheck -S warning -x bin/ovinstall bin/ovinstall-maintenance
 
       - name: ovinstall --help (no root required)
         run: ./bin/ovinstall --help
+
+  # Lightweight platform smoke: syntax + help inside common OS containers.
+  # Full package installs need privileged VMs — not in this job.
+  platform-syntax:
+    name: platform bash -n (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - rockylinux:9
+          - debian:12
+          - ubuntu:24.04
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: bash -n in container
+        run: |
+          set -euo pipefail
+          for f in bin/* lib/*.sh; do
+            bash -n "$f"
+          done
