@@ -14,7 +14,7 @@
 
 # Installation mode: agent, server, complete
 #   agent    — OpenVox Agent only (connects to an existing server)
-#   server   — Agent + Puppet Server + PuppetDB + r10k
+#   server   — Agent + OpenVox Server + OpenVoxDB + r10k
 #   complete — All components including OpenBolt + OpenVox-GUI
 # Default: complete
 # install_mode = complete
@@ -31,7 +31,7 @@
 # --- r10k (Server Only) -----------------------------------------------------
 
 # Git remote URL for control repository — REQUIRED when installing r10k
-# r10k clones this repo and creates Puppet environments from its branches.
+# r10k clones this repo and creates OpenVox environments from its branches.
 #   SSH:   git@github.com:yourorg/control-repo.git
 #   HTTPS: https://github.com/yourorg/control-repo.git
 # r10k_remote = git@github.com:yourorg/control-repo.git
@@ -56,7 +56,7 @@
 
 # --- Agent Settings ----------------------------------------------------------
 
-# Agent certificate name (use 'auto' to let Puppet use the hostname)
+# Agent certificate name (use 'auto' to let the agent use the hostname)
 # Default: auto
 # certname = auto
 
@@ -66,17 +66,17 @@
 
 # --- Server / JVM Settings (Server Only) ------------------------------------
 
-# JVM heap memory for PuppetServer (-Xmx / -Xms)
+# JVM heap memory for OpenVox Server (-Xmx / -Xms)
 # Default: 2g
 # jvm_memory = 2g
 
-# --- PuppetDB ----------------------------------------------------------------
+# --- OpenVoxDB (config keys still use puppetdb_* for compatibility) ----------
 
 # Database backend: internal (local PostgreSQL) or external
 # Default: internal
 # puppetdb_database = internal
 
-# Password for the PuppetDB PostgreSQL user.
+# Password for the OpenVoxDB PostgreSQL user.
 # Leave unset (or set to empty) to auto-generate a strong password stored at
 # /etc/openvox/puppetdb_password (mode 0600). Do NOT use "changeme" — it is
 # rejected / auto-replaced. If you set one, use >=12 chars of [A-Za-z0-9._-].
@@ -136,7 +136,7 @@
 
 # --- Finalization ------------------------------------------------------------
 
-# Run puppet agent -t after installation
+# Run `puppet agent -t` after installation (binary name)
 # Default: true
 # run_final_agent = true
 
