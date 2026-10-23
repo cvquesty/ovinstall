@@ -6,6 +6,8 @@
 > - **Future / not implemented as described below:** Python `lib/core/` / `lib/modules/*.py`, Jinja templates under `etc/templates/`, automated rollback CLI flags, download-cache proxy module, and several scaling workflows shown as Python sketches.
 >
 > When the narrative below refers to `.py` modules or a directory layout that is not present in this repository, treat it as a **target design**, not a claim about the shipped tree. Prefer [README.md](README.md) and [docs/USAGE.md](docs/USAGE.md) for operator-facing truth.
+>
+> **Naming:** Prefer **OpenVox**, **OpenVoxDB**, and **OpenVox-GUI** for products and subsystems. Keep `puppet`, `puppetserver`, `puppetdb`, `/etc/puppetlabs/...`, and `Puppetfile` when referring to binaries, unit names, filesystem paths, config filenames, or the historical Puppet project.
 
 ## 0. As-Built Architecture (bash)
 
@@ -41,7 +43,7 @@ This document describes the technical design for a production-ready OpenVox inst
 
 1. **Repository configuration** (yum/apt for voxpupuli.org)
 2. **Package installation** (OpenVox Server, Agent, OpenVoxDB)
-3. **Service configuration** (puppetserver, puppetdb, puppet agent)
+3. **Service configuration** (systemd units `puppetserver`, `puppetdb`, agent — upstream names)
 4. **Control repo integration** (clone, configure hiera)
 5. **r10k deployment** (install, configure, deploy Puppetfile per environment)
 6. **Initial agent run** (complete configuration)

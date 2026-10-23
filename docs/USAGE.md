@@ -6,6 +6,8 @@ Commands below match `bin/ovinstall` and `bin/ovinstall-maintenance` only — no
 
 Badges, requirements, and component tables live in the [root README](../README.md).
 
+**Naming:** Product and subsystem names use **OpenVox** / **OpenVoxDB** / **OpenVox-GUI**. Paths, package unit names, and CLI binaries that still ship as `puppet`, `puppetserver`, or `puppetdb` are written that way on purpose.
+
 ## Prerequisites
 
 - Root or `sudo`
@@ -30,7 +32,7 @@ Prompts for server hostname (when installing a server), r10k control-repo URL (w
 sudo ./bin/ovinstall
 ```
 
-Default mode is `complete` (agent + server + PuppetDB + r10k + OpenBolt + GUI) unless you pass flags or a config `install_mode`.
+Default mode is `complete` (agent + server + OpenVoxDB + r10k + OpenBolt + GUI) unless you pass flags or a config `install_mode`.
 
 ## 3. Preview with dry-run
 
@@ -71,7 +73,7 @@ Keys actually read by `load_config` are listed in the README Configuration secti
 | Goal | Command |
 |------|---------|
 | Agent only | `sudo ./bin/ovinstall --agent` |
-| Server (agent + Puppet Server + PuppetDB + r10k) | `sudo ./bin/ovinstall --server` |
+| Server (agent + OpenVox Server + OpenVoxDB + r10k) | `sudo ./bin/ovinstall --server` |
 | Everything including OpenBolt + GUI | `sudo ./bin/ovinstall --mode complete --non-interactive` |
 
 `--agent` does not imply `--non-interactive` (pass it explicitly). You can also combine component flags such as `--gui` or `--openbolt` with an explicit selection.

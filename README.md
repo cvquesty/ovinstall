@@ -2,7 +2,7 @@
 
 # ovinstall
 
-**Automated bash installer for the complete OpenVox stack — agent, server, PuppetDB, r10k, OpenBolt, and OpenVox-GUI — without hand-rolling package repos every time.**
+**Automated bash installer for the complete OpenVox stack — agent, server, OpenVoxDB, r10k, OpenBolt, and OpenVox-GUI — without hand-rolling package repos every time.**
 
 [![Version](https://img.shields.io/badge/version-0.3.0-orange?style=for-the-badge)](https://github.com/cvquesty/ovinstall/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
@@ -18,20 +18,20 @@
 
 ## What is ovinstall?
 
-ovinstall is a **pure bash** installer you run on a Linux host (as root). It configures Vox Pupuli yum/apt repositories, installs the OpenVox stack components you select, wires PuppetDB termini, deploys code with r10k, and fail-closes verification so a “successful” install means services and ports actually came up.
+ovinstall is a **pure bash** installer you run on a Linux host (as root). It configures Vox Pupuli yum/apt repositories, installs the OpenVox stack components you select, wires OpenVoxDB termini, deploys code with r10k, and fail-closes verification so a “successful” install means services and ports actually came up.
 
 Companion tooling: **`bin/ovinstall-maintenance`** for health checks, backup/restore, JVM tuning, and scaling helpers.
 
-You do **not** need Bolt or Puppet already installed to run the installer — only bash, curl, and network access to voxpupuli.org (and GitHub when cloning the GUI / control repo).
+You do **not** need OpenBolt or an existing OpenVox/Puppet agent already installed to run the installer — only bash, curl, and network access to voxpupuli.org (and GitHub when cloning the GUI / control repo).
 
 ### Components it can install
 
 | Component | Package / source | Notes |
 |-----------|------------------|-------|
 | **OpenVox Agent** | `openvox-agent` | Connects to an existing or local server |
-| **OpenVox Server** | `openvox-server` | Puppet Server + PuppetDB terminus wiring |
-| **PuppetDB / OpenVoxDB** | `puppetdb` | Internal PostgreSQL by default |
-| **r10k** | gem via Puppet Ruby | Server-only; owns environments |
+| **OpenVox Server** | `openvox-server` | Catalog compiler + OpenVoxDB terminus wiring |
+| **OpenVoxDB** | `puppetdb` / `openvoxdb` package | Internal PostgreSQL by default (service unit often still `puppetdb`) |
+| **r10k** | gem via OpenVox/Puppet bundled Ruby | Server-only; owns environments |
 | **OpenBolt** | `openbolt` | Agentless orchestration |
 | **OpenVox-GUI** | git clone + `install.sh` | Optional web UI |
 
@@ -46,7 +46,7 @@ You do **not** need Bolt or Puppet already installed to run the installer — on
 | **Root / sudo** | Package install + service control | Local admin |
 | **Vox Pupuli repos** | OpenVox packages | [yum.voxpupuli.org](https://yum.voxpupuli.org) / [apt.voxpupuli.org](https://apt.voxpupuli.org) |
 
-Optional on the target host after install: OpenJDK for Puppet Server (as required by the OpenVox server package), PostgreSQL when using an external PuppetDB.
+Optional on the target host after install: OpenJDK for OpenVox Server (as required by the `openvox-server` package), PostgreSQL when using an external OpenVoxDB.
 
 ## Requirements
 
@@ -97,14 +97,14 @@ sudo ./bin/ovinstall --config /etc/openvox/openvox.conf --non-interactive
 
 ## Installation Modes
 
-| Mode | Agent | Server | PuppetDB | r10k | OpenBolt | GUI |
+| Mode | Agent | Server | OpenVoxDB | r10k | OpenBolt | GUI |
 |------|-------|--------|----------|------|----------|-----|
 | `agent` | ✓ | | | | | |
 | `server` | ✓ | ✓ | ✓ | ✓ | | |
 | `complete` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-- **`agent`** — Standalone Puppet agent only; connects to an existing Puppet Server.
-- **`server`** — Full Puppet Server with PuppetDB and r10k for code deployment.
+- **`agent`** — Standalone OpenVox Agent only; connects to an existing OpenVox Server.
+- **`server`** — Full OpenVox Server with OpenVoxDB and r10k for code deployment.
 - **`complete`** — All components including OpenBolt and OpenVox-GUI.
 
 ## Usage
@@ -144,7 +144,7 @@ For a step-by-step walkthrough, see [docs/USAGE.md](docs/USAGE.md).
 | `-c, --config FILE` | Path to configuration file (default: `/etc/openvox/openvox.conf`) |
 | `-m, --mode MODE` | Installation mode: `agent`, `server`, `complete` |
 | `--agent` | Install agent only |
-| `--server` | Install server (agent + PuppetDB + r10k) |
+| `--server` | Install server (agent + OpenVoxDB + r10k) |
 | `--gui` | Install OpenVox-GUI |
 | `--openbolt` | Install OpenBolt |
 | `--non-interactive` | Run without prompting |
@@ -171,19 +171,19 @@ Only the keys listed below are applied. Unknown keys are logged at debug level a
 
 | Key | Aliases | Description |
 |-----|---------|-------------|
-| `server_hostname` | | FQDN of the Puppet server (required for server installs) |
+| `server_hostname` | | FQDN of the OpenVox Server (required for server installs) |
 | `r10k_remote` | | Git URL for the control repository (required when installing r10k) |
 | `gui_port` | | OpenVox-GUI listen port (default in installer: `4567`) |
 | `gui_repo_url` | | Git URL for OpenVox-GUI clone (default: `https://github.com/cvquesty/openvox-gui.git`) |
 | `install_mode` | `mode` | Installation mode: `agent`, `server`, or `complete` |
-| `certname` | | Agent certificate name; use `auto` to let Puppet use the hostname |
+| `certname` | | Agent certificate name; use `auto` to let the agent use the hostname |
 | `runinterval` | | Agent run interval (e.g. `30m`, `1h`) |
-| `jvm_memory` | | Puppet Server JVM heap (`-Xms`/`-Xmx`), e.g. `2g` |
+| `jvm_memory` | | OpenVox Server JVM heap (`-Xms`/`-Xmx`), e.g. `2g` |
 | `log_level` | | Logging level: `debug`, `info`, `warning`, `error` |
 | `firewall` | | Documented for firewalld configuration preference (parsed into shell; see note) |
 | `selinux` | | Documented SELinux preference: `enforcing`, `permissive`, `disabled` (parsed into shell; see note) |
 | `puppetdb_database` | | `internal` (local PostgreSQL) or `external` |
-| `puppetdb_password` | | Password for the PuppetDB PostgreSQL user |
+| `puppetdb_password` | | Password for the OpenVoxDB PostgreSQL user (config key name unchanged) |
 | `puppetdb_db_host` | | External DB host (when `puppetdb_database = external`) |
 | `puppetdb_db_port` | | External DB port |
 | `puppetdb_db_name` | | External DB name |
@@ -261,7 +261,7 @@ sudo ./bin/ovinstall-maintenance --help
 
 | Action | Description |
 |--------|-------------|
-| `--health` | Check Puppet Server, PuppetDB, agent enablement, r10k, disk, CA cert |
+| `--health` | Check OpenVox Server, OpenVoxDB, agent enablement, r10k, disk, CA cert |
 | `--add COMPONENT --host H` | Generate/add guidance for a component on host `H` |
 | `--remove COMPONENT --host H` | Remove-component helper (warns that manual cleanup is required) |
 | `--mode MODE` | Change server mode: `ca-only`, `all-in-one`, or `maintenance` |
@@ -277,7 +277,7 @@ sudo ./bin/ovinstall-maintenance --help
 | Component | Meaning |
 |-----------|---------|
 | `compile-master` | Catalog compiler server (`catalog-compiler` accepted as alias on add) |
-| `puppetdb-replica` | PuppetDB replica for HA |
+| `puppetdb-replica` | OpenVoxDB replica for HA |
 | `ca-server` | CA-only server |
 
 **Modes** for `--mode`:
@@ -298,8 +298,8 @@ ovinstall/
 ├── lib/
 │   ├── functions.sh              # Logging, load_config, OS, repos, firewall/SELinux
 │   ├── agent.sh                  # OpenVox Agent installer
-│   ├── server.sh                 # OpenVox Server (PuppetServer) installer
-│   ├── puppetdb.sh               # PuppetDB installer
+│   ├── server.sh                 # OpenVox Server installer
+│   ├── puppetdb.sh               # OpenVoxDB installer
 │   ├── r10k.sh                   # r10k installer + environment deploy
 │   ├── openbolt.sh               # OpenBolt installer
 │   ├── gui.sh                    # OpenVox-GUI installer
@@ -331,7 +331,7 @@ ovinstall/
 
 2. **Component Installation** (`phase_install_components`)
    - Installs selected components based on mode/flags
-   - Agent → Server → PuppetDB → r10k → OpenBolt → GUI (as selected)
+   - Agent → Server → OpenVoxDB → r10k → OpenBolt → GUI (as selected)
 
 3. **Post-Install Configuration** (`phase_post_install`)
    - `configure_firewall` / `configure_selinux` / `configure_services`
@@ -339,7 +339,7 @@ ovinstall/
    - Environments are **r10k-only**; `deploy_control_repo` into the environments basedir is deprecated and skipped
 
 4. **Verification** (`phase_verify`) — fail-closed
-   - `verify_services` / `verify_connectivity` (and PuppetDB `routes.yaml` + `puppetdb.conf` when server)
+   - `verify_services` / `verify_connectivity` (and OpenVoxDB terminus files `routes.yaml` + `puppetdb.conf` when server)
    - `verify_openbolt` when OpenBolt was installed
 
 5. **Finalize** (`phase_finalize`)
@@ -354,18 +354,18 @@ ovinstall/
 - Applies `certname` / `runinterval` when provided
 - Does NOT require r10k or server components
 
-#### OpenVox Server (PuppetServer)
+#### OpenVox Server
 - Installs `openvox-server` package
-- Configures server hostname, JVM heap (`jvm_memory`), and PuppetDB integration
-- Starts the `puppetserver` service
+- Configures server hostname, JVM heap (`jvm_memory`), and OpenVoxDB integration
+- Starts the `puppetserver` service (upstream unit name)
 
-#### PuppetDB
-- Installs `puppetdb` package
-- Sets up internal PostgreSQL database (or connects to an external one via `puppetdb_*` keys)
-- Starts the `puppetdb` service
+#### OpenVoxDB
+- Installs the `puppetdb` / `openvoxdb` package as shipped by Vox Pupuli
+- Sets up internal PostgreSQL (or connects to an external DB via `puppetdb_*` keys)
+- Starts the `puppetdb` service (upstream unit name)
 
 #### r10k (Server Only)
-- Installs r10k Ruby gem via Puppet's bundled gem
+- Installs r10k Ruby gem via the OpenVox agent’s bundled gem
 - Creates config at `/etc/puppetlabs/r10k/r10k.yaml`
 - Deploys environments (with Puppetfiles) from the control repository via a single `r10k deploy environment -p`
 
@@ -400,7 +400,7 @@ ovinstall/
 ## Differences from puppet-openvox_bootstrap
 
 This project differs from the Bolt-based approach:
-- **Pure bash** — No Bolt/Puppet required to run the installer
+- **Pure bash** — No OpenBolt or pre-installed OpenVox agent required to run the installer
 - **Interactive mode** — Prompts for required values by default
 - **Flat config file** — Simple `key = value` format
 - **Modular** — Each component has its own installer script in `lib/`

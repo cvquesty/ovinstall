@@ -4,7 +4,7 @@
 
 **Project Name:** ovinstall  
 **Type:** Bash-based automated installation tool  
-**Purpose:** Fully automated installation of the complete OpenVox server stack (Agent, Server, PuppetDB, r10k, OpenBolt, OpenVox-GUI) using yum.voxpupuli.org and apt.voxpupuli.org repositories  
+**Purpose:** Fully automated installation of the complete OpenVox server stack (Agent, Server, OpenVoxDB, r10k, OpenBolt, OpenVox-GUI) using yum.voxpupuli.org and apt.voxpupuli.org repositories  
 **Configuration:** INI-style configuration file  
 **Target Users:** System administrators deploying OpenVox infrastructure
 
@@ -17,8 +17,8 @@
 | Component | Package Name | Description |
 |-----------|--------------|-------------|
 | OpenVox Agent | `openvox-agent` | Ruby-based agent for configuration management |
-| OpenVox Server | `openvox-server` | PuppetServer (JRuby + Jetty) for catalog compilation |
-| PuppetDB | `puppetdb` (or `openvoxdb`) | PostgreSQL-backed data warehouse |
+| OpenVox Server | `openvox-server` | Catalog compiler (JRuby + Jetty); service unit `puppetserver` |
+| OpenVoxDB | `puppetdb` (or `openvoxdb`) | PostgreSQL-backed data warehouse; unit often `puppetdb` |
 | r10k | `r10k` | Git-to-environment deployer |
 | OpenBolt | `openbolt` | Agentless orchestration tool |
 | OpenVox-GUI | Git clone + install script | Web management UI |
@@ -47,7 +47,7 @@
 | CLI Mode | Components |
 |----------|------------|
 | `agent` | Agent only — connects to an existing server |
-| `server` | Agent + Server + PuppetDB + r10k |
+| `server` | Agent + Server + OpenVoxDB + r10k |
 | `complete` | All of the above + OpenBolt + OpenVox-GUI |
 
 ### Configuration File Structure
@@ -66,7 +66,7 @@ server_hostname = openvox.example.com
 # r10k
 r10k_remote = git@github.com:org/control-repo.git
 
-# PuppetDB
+# OpenVoxDB (keys remain puppetdb_* )
 puppetdb_database = internal
 puppetdb_password = changeme
 puppetdb_db_host = localhost
@@ -103,7 +103,7 @@ log_level = info
 - [ ] Verify OS version and architecture
 - [ ] Check for sufficient disk space (15GB recommended)
 - [ ] Verify network connectivity to voxpupuli.org
-- [ ] Check for conflicting packages (puppet, pe-* packages)
+- [ ] Check for conflicting packages (legacy `puppet`, `pe-*` packages)
 - [ ] Validate configuration file syntax
 - [ ] Check for root/sudo access
 - [ ] Verify DNS resolution
@@ -127,15 +127,15 @@ log_level = info
 
 #### Server Installation
 - [ ] Install `openvox-server` package
-- [ ] Configure PuppetServer memory (JAVA_ARGS)
+- [ ] Configure OpenVox Server memory (JAVA_ARGS)
 - [ ] Configure server SSL certificates
 - [ ] Enable and start `puppetserver` service
 
-#### PuppetDB Installation
+#### OpenVoxDB Installation
 - [ ] Install `puppetdb` package
 - [ ] Install and configure PostgreSQL (internal) or connect to external
-- [ ] Configure PuppetDB SSL
-- [ ] Update `puppet.conf` to use PuppetDB
+- [ ] Configure OpenVoxDB SSL
+- [ ] Update `puppet.conf` to use OpenVoxDB
 - [ ] Enable and start `puppetdb` service
 
 #### r10k Installation
@@ -163,7 +163,7 @@ log_level = info
 
 - [ ] Configure firewall rules (if enabled)
 - [ ] Configure SELinux (if RHEL)
-- [ ] Run initial Puppet agent run
+- [ ] Run initial OpenVox agent run (`puppet agent -t`)
 - [ ] Verify all services are running
 - [ ] Sign agent certificates (if autosign disabled)
 - [ ] Run health checks
@@ -172,7 +172,7 @@ log_level = info
 
 - [ ] Verify all services are running
 - [ ] Test agent-server connectivity
-- [ ] Test PuppetDB connectivity
+- [ ] Test OpenVoxDB connectivity
 - [ ] Test r10k deployment
 - [ ] Test OpenBolt connectivity
 - [ ] Test OpenVox-GUI web interface
@@ -193,7 +193,7 @@ ovinstall/
 │   ├── functions.sh              # Common functions (logging, OS detection, repos)
 │   ├── agent.sh                  # OpenVox Agent installation
 │   ├── server.sh                 # OpenVox Server installation
-│   ├── puppetdb.sh               # PuppetDB installation
+│   ├── puppetdb.sh               # OpenVoxDB installation
 │   ├── r10k.sh                   # r10k installation (server only)
 │   ├── control_repo.sh           # Control repo / hiera helpers
 │   ├── openbolt.sh               # OpenBolt installation
@@ -366,7 +366,7 @@ sudo ./bin/ovinstall --non-interactive
 
 ### Test Matrix
 
-| OS | Agent | Server | PuppetDB | r10k | OpenBolt | GUI |
+| OS | Agent | Server | OpenVoxDB | r10k | OpenBolt | GUI |
 |----|-------|--------|----------|------|----------|-----|
 | RHEL 8 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | RHEL 9 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -409,7 +409,7 @@ Future documentation (Phase 2):
 | Phase | Description | Estimated Time |
 |-------|-------------|----------------|
 | 1 | Core installer framework | 1 week |
-| 2 | Agent + Server + PuppetDB | 1 week |
+| 2 | Agent + Server + OpenVoxDB | 1 week |
 | 3 | r10k + OpenBolt | 3 days |
 | 4 | OpenVox-GUI integration | 1 week |
 | 5 | Testing and documentation | 1 week |
