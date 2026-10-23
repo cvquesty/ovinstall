@@ -25,11 +25,13 @@
 
 ### Supported Platforms
 
+Accepted by `check_os` (not install-tested; see Test Matrix):
+
 #### RHEL-based
 - RHEL 8, 9, 10
-- CentOS 8+
-- Rocky Linux 8+
-- AlmaLinux 8+
+- CentOS 8, 9, 10
+- Rocky Linux 8, 9, 10
+- AlmaLinux 8, 9, 10
 - Fedora 42+
 
 #### Debian-based
@@ -366,8 +368,17 @@ sudo ./bin/ovinstall --non-interactive
 
 ### Test Matrix
 
-| OS | Agent | Server | OpenVoxDB | r10k | OpenBolt | GUI |
-|----|-------|--------|----------|------|----------|-----|
+Current evidence only (`.github/workflows/ci.yml`). No OS has an install-tested component yet.
+
+| OS | CI coverage | Install-tested |
+|----|-------------|----------------|
+| Rocky 9 (container) | `bash -n` | No |
+| Debian 12 (container) | `bash -n` | No |
+| Ubuntu 24.04 (container) | `bash -n` | No |
+| ubuntu-latest runner | `bash -n`, shellcheck, `--help` | No |
+| RHEL/CentOS/Alma 8–10, Rocky 8/10, Fedora 42+, Debian 11, Ubuntu 22.04 | None (accepted by `check_os` only) | No |
+
+----|-------|--------|----------|------|----------|-----|
 | RHEL 8 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | RHEL 9 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Rocky 9 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |

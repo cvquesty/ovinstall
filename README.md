@@ -52,12 +52,16 @@ Optional on the target host after install: OpenJDK for OpenVox Server (as requir
 
 ### Supported operating systems
 
-| Family | Versions |
-|--------|----------|
-| **RHEL / CentOS / Rocky / AlmaLinux** | 8, 9, 10 |
-| **Fedora** | 42+ |
-| **Debian** | 11 (Bullseye), 12 (Bookworm) |
-| **Ubuntu** | 22.04 (Jammy), 24.04 (Noble) |
+`check_os` in `lib/functions.sh` accepts the platforms below (x86_64/amd64 and aarch64/arm64). **None of them is install-tested in CI.** CI only runs `bash -n` syntax checks inside `rockylinux:9`, `debian:12` and `ubuntu:24.04` containers (plus shellcheck and `--help` on ubuntu-latest).
+
+| Family | Versions accepted by `check_os` | CI coverage |
+|--------|-------------------------------|-------------|
+| **RHEL / CentOS / Rocky / AlmaLinux** | 8, 9, 10 | Syntax only (`rockylinux:9`) |
+| **Fedora** | 42+ (uses EL-9 release package) | None |
+| **Debian** | 11 (Bullseye), 12 (Bookworm) | Syntax only (`debian:12`) |
+| **Ubuntu** | 22.04 (Jammy), 24.04 (Noble) | Syntax only (`ubuntu:24.04`) |
+
+EL 10 also uses the EL-9 release package.
 
 Unsupported OS/arch fails closed unless you pass `--force`.
 
