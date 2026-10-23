@@ -12,7 +12,7 @@ Badges, requirements, and component tables live in the [root README](../README.m
 
 - Root or `sudo`
 - bash 4.0+, curl, and (for r10k / GUI) git
-- Supported OS (RHEL-family 8+ / Fedora 42+, Debian 11–12, Ubuntu 22.04 / 24.04)
+- An OS accepted by `check_os` (RHEL-family 8–10 / Fedora 42+, Debian 11–12, Ubuntu 22.04 / 24.04); CI checks syntax only, see README
 - About 15 GB free on `/`
 - Network access to Vox Pupuli repos and (as needed) GitHub
 - For server installs: a resolvable FQDN
